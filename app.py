@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, Response
+from flask import Flask, render_template, request, jsonify, send_file, Response, send_from_directory
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, AudioFileClip
 from PIL import Image, ImageDraw, ImageFont
 import os
@@ -19,6 +19,14 @@ from services.stock_media import StockMediaService
 from services.audio_service import AudioService
 from services.sheets_manager import SheetsManager
 
+# Import utility functions
+from utils import (
+    cleanup_old_temp_files as utils_cleanup_old_temp_files,
+    get_available_fonts as utils_get_available_fonts,
+    create_text_preview_image_in_memory,
+    image_to_base64_data_url
+)
+
 app = Flask(__name__)
 app.config.from_object(Config)
 
@@ -32,113 +40,12 @@ stock_media = StockMediaService()
 audio_service = AudioService()
 sheets_manager = SheetsManager()
 
-# Clean up old temporary files on startup
-def cleanup_old_temp_files():
-    """Clean up temporary files older than 1 hour"""
-    try:
-        temp_dir = app.config['TEMP_FOLDER']
-        current_time = time.time()
-        for filename in os.listdir(temp_dir):
-            file_path = os.path.join(temp_dir, filename)
-            if os.path.isfile(file_path):
-                # Remove files older than 1 hour
-                if current_time - os.path.getmtime(file_path) > 3600:
-                    try:
-                        os.unlink(file_path)
-                        print(f"Cleaned up old temp file: {filename}")
-                    except Exception as e:
-                        print(f"Could not clean up {filename}: {e}")
-    except Exception as e:
-        print(f"Error during temp file cleanup: {e}")
-
-# Import time module for cleanup
-import time
-
-def get_available_fonts():
-    """Detect available fonts with bundled high-quality fonts prioritized"""
-    available_fonts = []
-    
-    print("🔍 Starting font detection with bundled fonts...")
-    
-    # PRIORITY 1: Our bundled high-quality fonts (guaranteed to exist)
-    bundled_fonts = [
-        os.path.join('static', 'fonts', 'Roboto-Bold.ttf'),
-        os.path.join('static', 'fonts', 'Roboto-Regular.ttf')
-    ]
-    
-    for font_path in bundled_fonts:
-        if os.path.exists(font_path):
-            available_fonts.append(font_path)
-            print(f"✅ Found bundled font: {font_path}")
-        else:
-            print(f"❌ Missing bundled font: {font_path}")
-    
-    # PRIORITY 2: System fonts (if any exist in Railway)
-    font_directories = [
-        '/usr/share/fonts',
-        '/usr/local/share/fonts',
-        '/usr/share/fonts/truetype',
-        '/usr/share/fonts/TTF',
-        '/usr/share/fonts/opentype',
-        '/usr/share/fonts/Type1',
-        '/System/Library/Fonts',  # macOS
-        '/Library/Fonts',         # macOS
-    ]
-    
-    existing_dirs = []
-    for font_dir in font_directories:
-        if os.path.exists(font_dir):
-            existing_dirs.append(font_dir)
-            print(f"📁 Found system font directory: {font_dir}")
-    
-    # Simple recursive search for TTF/OTF files
-    import glob
-    
-    for font_dir in existing_dirs:
-        try:
-            ttf_pattern = os.path.join(font_dir, "**", "*.ttf")
-            ttf_files = glob.glob(ttf_pattern, recursive=True)
-            
-            otf_pattern = os.path.join(font_dir, "**", "*.otf") 
-            otf_files = glob.glob(otf_pattern, recursive=True)
-            
-            all_fonts = ttf_files + otf_files
-            
-            # Prioritize common high-quality fonts
-            priority_fonts = []
-            regular_fonts = []
-            
-            for font_file in all_fonts:
-                font_name = os.path.basename(font_file).lower()
-                if any(keyword in font_name for keyword in ['dejavu', 'liberation', 'ubuntu', 'roboto', 'opensans']):
-                    priority_fonts.append(font_file)
-                else:
-                    regular_fonts.append(font_file)
-            
-            # Add system fonts (avoiding duplicates)
-            for font_file in priority_fonts + regular_fonts:
-                if font_file not in available_fonts:
-                    available_fonts.append(font_file)
-                    if len(available_fonts) >= 15:  # Limit total fonts
-                        break
-                        
-        except Exception as e:
-            print(f"❌ Error scanning {font_dir}: {e}")
-            continue
-    
-    print(f"🔍 Found {len(available_fonts)} total fonts:")
-    for i, font in enumerate(available_fonts[:8]):
-        print(f"   {i+1}. {os.path.basename(font)}")
-    
-    if len(available_fonts) > 8:
-        print(f"   ... and {len(available_fonts) - 8} more")
-    
-    return available_fonts
+# Utility functions moved to utils.py
 
 @app.route('/')
 def index():
     # Clean up old temp files on each request to homepage
-    cleanup_old_temp_files()
+    utils_cleanup_old_temp_files(app.config['TEMP_FOLDER'])
     return render_template('index.html')
 
 @app.route('/analyze-poem', methods=['POST'])
@@ -236,185 +143,21 @@ def generate_story():
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    """Download generated story file and clean up after download"""
+    """Download a generated file"""
     try:
-        file_path = os.path.join(app.config['TEMP_FOLDER'], filename)
-        
-        # Check if file exists
-        if not os.path.exists(file_path):
-            return jsonify({'error': 'File not found'}), 404
-        
-        # Get file size for logging
-        file_size = os.path.getsize(file_path)
-        print(f"Downloading file: {filename} ({file_size} bytes)")
-        
-        # Create a response that will clean up the file after sending
-        def generate_and_cleanup():
-            try:
-                with open(file_path, 'rb') as f:
-                    while True:
-                        chunk = f.read(8192)
-                        if not chunk:
-                            break
-                        yield chunk
-            finally:
-                # Clean up the file after sending
-                try:
-                    os.unlink(file_path)
-                    print(f"Cleaned up temporary file: {filename}")
-                except Exception as cleanup_error:
-                    print(f"Warning: Could not clean up {filename}: {cleanup_error}")
-        
-        return Response(
-            generate_and_cleanup(),
-            content_type='video/mp4',
-            headers={
-                'Content-Disposition': f'attachment; filename="{filename}"',
-                'Content-Length': str(file_size)
-            }
-        )
+        return send_from_directory(app.config['TEMP_FOLDER'], filename, as_attachment=True)
     except Exception as e:
-        print(f"Error downloading file {filename}: {e}")
-        return jsonify({'error': str(e)}), 404
+        return jsonify({'error': f'File not found: {filename}'}), 404
 
-@app.route('/test-text-rendering')
-def test_text_rendering():
-    """Test endpoint to verify text rendering works in production"""
+@app.route('/preview/<filename>')
+def preview_file(filename):
+    """Serve preview images"""
     try:
-        # Test both MoviePy and PIL text rendering
-        test_text = "Test overlay quality"
-        video_width, video_height = 1080, 1920
-        font_size = 60
-        text_color = "#FFFFFF"
-        duration = 5
-        
-        print("🧪 Testing text rendering capabilities...")
-        
-        # Test MoviePy TextClip
-        moviepy_success = False
-        try:
-            text_clip = create_text_clip_with_moviepy(test_text, video_width, video_height, font_size, text_color, duration)
-            if text_clip:
-                moviepy_success = True
-                text_clip.close()  # Clean up
-        except Exception as e:
-            print(f"MoviePy test failed: {e}")
-        
-        # Test enhanced PIL
-        pil_success = False
-        try:
-            text_clip = create_enhanced_pil_text_clip(test_text, video_width, video_height, font_size, text_color, duration)
-            if text_clip:
-                pil_success = True
-                text_clip.close()  # Clean up
-        except Exception as e:
-            print(f"Enhanced PIL test failed: {e}")
-        
-        # Check ImageMagick availability
-        imagemagick_available = False
-        try:
-            import shutil
-            magick_binary = shutil.which('magick') or shutil.which('convert')
-            imagemagick_available = magick_binary is not None
-        except:
-            pass
-        
-        # Check available fonts using the detection function
-        available_fonts = get_available_fonts()
-        
-        return jsonify({
-            'status': 'success',
-            'moviepy_rendering': moviepy_success,
-            'enhanced_pil_rendering': pil_success,
-            'imagemagick_available': imagemagick_available,
-            'available_fonts': available_fonts,
-            'environment': 'production' if os.environ.get('PORT') else 'development',
-            'platform': os.name
-        })
-        
+        return send_from_directory(app.config['TEMP_FOLDER'], filename)
     except Exception as e:
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        return jsonify({'error': f'Preview not found: {filename}'}), 404
 
-@app.route('/test-text-image')
-def test_text_image():
-    """Test endpoint to generate a standalone text image for debugging"""
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-        
-        # Test parameters
-        test_text = "Don't bend;\ndon't water it down;\ndon't try to make it logical"
-        width, height = 1080, 1920
-        font_size = 60
-        text_color = "#FFFFFF"
-        
-        print(f"🧪 Testing text image generation: '{test_text}'")
-        
-        # Create image with black background
-        img = Image.new('RGB', (width, height), (0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        
-        # Try to load fonts
-        available_fonts = get_available_fonts()
-        font = None
-        
-        if available_fonts:
-            for font_path in available_fonts[:3]:
-                try:
-                    font = ImageFont.truetype(font_path, font_size)
-                    print(f"✅ Using font: {os.path.basename(font_path)}")
-                    break
-                except Exception as e:
-                    print(f"❌ Failed font {font_path}: {e}")
-                    continue
-        
-        if font is None:
-            print("⚠️ Using default font")
-            font = ImageFont.load_default()
-        
-        # Parse color
-        if text_color.startswith('#'):
-            text_color = text_color.lstrip('#')
-            color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
-        else:
-            color_rgb = (255, 255, 255)
-        
-        # Draw text with outline
-        lines = test_text.split('\n')
-        line_height = font_size + 10
-        total_height = len(lines) * line_height
-        start_y = (height - total_height) // 2
-        
-        for i, line in enumerate(lines):
-            bbox = draw.textbbox((0, 0), line, font=font)
-            text_width = bbox[2] - bbox[0]
-            x = (width - text_width) // 2
-            y = start_y + (i * line_height)
-            
-            # Black outline
-            for dx in [-2, -1, 0, 1, 2]:
-                for dy in [-2, -1, 0, 1, 2]:
-                    if dx != 0 or dy != 0:
-                        draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0))
-            
-            # White text
-            draw.text((x, y), line, font=font, fill=color_rgb)
-            print(f"✅ Drew line: '{line}' at ({x}, {y})")
-        
-        # Save test image
-        test_path = os.path.join('temp', 'test_text_image.png')
-        os.makedirs('temp', exist_ok=True)
-        img.save(test_path)
-        
-        print(f"✅ Saved test image to {test_path}")
-        
-        # Return the image
-        return send_file(test_path, mimetype='image/png')
-        
-    except Exception as e:
-        print(f"❌ Error in test text image: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+# Removed unused test endpoints
 
 @app.route('/proxy-media')
 def proxy_media():
@@ -467,20 +210,25 @@ def proxy_media():
         traceback.print_exc()
         return jsonify({'error': 'Failed to load media'}), 500
 
-@app.route('/test-proxy')
-def test_proxy():
-    """Test endpoint to check if proxy is working"""
-    return jsonify({'status': 'Proxy endpoint is working'})
+# Removed unused test-proxy endpoint
 
 @app.route('/cleanup-temp', methods=['POST'])
 def cleanup_temp_files():
     """Manually clean up temporary files"""
     try:
-        cleanup_old_temp_files()
+        utils_cleanup_old_temp_files(app.config['TEMP_FOLDER'])
         return jsonify({
             'success': True,
             'message': 'Temporary files cleaned up successfully'
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/cleanup-previews', methods=['POST'])
+def cleanup_preview_files():
+    """Manual cleanup of text preview files specifically - DEPRECATED: No longer needed"""
+    try:
+        return jsonify({'success': True, 'message': 'Text preview cleanup no longer needed - using in-memory previews'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -630,7 +378,7 @@ def debug_fonts():
                 debug_info["font_search_results"][pattern] = f"Error: {str(e)}"
         
         # Use our font detection function
-        detected_fonts = get_available_fonts()
+        detected_fonts = utils_get_available_fonts()
         debug_info["detected_fonts"] = detected_fonts
         
         return jsonify(debug_info)
@@ -638,8 +386,42 @@ def debug_fonts():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/preview-text', methods=['POST'])
+def preview_text():
+    """Generate a preview image of how text will look on video overlay - returns base64 data URL"""
+    try:
+        data = request.get_json()
+        poem_text = data.get('poem_text', '')
+        font_size = data.get('font_size', app.config['DEFAULT_FONT_SIZE'])
+        text_color = data.get('text_color', app.config['DEFAULT_TEXT_COLOR'])
+        
+        if not poem_text:
+            return jsonify({'error': 'Poem text is required'}), 400
+        
+        # Generate preview image in memory
+        img = create_text_preview_image_in_memory(poem_text, font_size, text_color)
+        
+        if img:
+            # Convert to base64 data URL
+            data_url = image_to_base64_data_url(img)
+            
+            if data_url:
+                return jsonify({
+                    'success': True,
+                    'preview_data_url': data_url,
+                    'message': 'Text preview generated successfully'
+                })
+            else:
+                return jsonify({'error': 'Failed to convert image to data URL'}), 500
+        else:
+            return jsonify({'error': 'Failed to generate text preview'}), 500
+            
+    except Exception as e:
+        print(f"Error generating text preview: {e}")
+        return jsonify({'error': str(e)}), 500
+
 def create_text_clip_with_pil(text, video_width, video_height, font_size, text_color, duration):
-    """Create a text clip using PIL instead of MoviePy's TextClip to avoid ImageMagick issues"""
+    """Create a text clip using PIL with improved text formatting and layout"""
     try:
         from moviepy.video.VideoClip import ImageClip
         import textwrap
@@ -652,11 +434,24 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
             print("Warning: Empty or whitespace-only text provided")
             text = "No text provided"
         
-        # Normalize text - ensure consistent line breaks and spacing
+        # Clean up text but preserve intentional line breaks (same as preview function)
         text = text.strip()
-        # Replace multiple spaces with single space
+        # Remove excessive whitespace but keep line breaks
         import re
-        text = re.sub(r'\s+', ' ', text)
+        # Replace multiple spaces with single space, but preserve line breaks
+        text = re.sub(r'[ \t]+', ' ', text)
+        # Remove empty lines but keep intentional spacing
+        lines = text.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            line = line.strip()
+            if line:  # Keep non-empty lines
+                cleaned_lines.append(line)
+            elif cleaned_lines and cleaned_lines[-1] != '':  # Add single empty line for spacing
+                cleaned_lines.append('')
+        
+        # Join back with proper line breaks
+        text = '\n'.join(cleaned_lines)
         print(f"Normalized text: '{text[:100]}...'")
         
         # Parse color - handle hex colors like '#ffffff' or named colors like 'white'
@@ -690,6 +485,8 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         try:
             # Try common system fonts in order of preference
             font_paths = [
+                # Bundled font (highest priority)
+                os.path.join(os.path.dirname(__file__), 'static', 'fonts', 'Roboto-Bold.woff2'),
                 '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
                 '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
                 '/System/Library/Fonts/Arial.ttf',  # macOS
@@ -734,52 +531,43 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         # Log the final font configuration for debugging
         print(f"Final font configuration: path={used_font_path}, size={font_size}")
         
-        # Wrap text to fit width - use more robust calculation
-        try:
-            # Get actual font metrics for better text wrapping
-            test_bbox = draw.textbbox((0, 0), "W", font=font)  # Use 'W' as it's typically the widest character
-            avg_char_width = test_bbox[2] - test_bbox[0]
-            chars_per_line = max(20, int(text_width / avg_char_width))
-            wrapped_lines = textwrap.wrap(text, width=chars_per_line)
-            print(f"Text wrapping: {len(wrapped_lines)} lines, {chars_per_line} chars per line")
+        # Process text lines with intelligent wrapping (same as preview function)
+        processed_lines = []
+        for line in text.split('\n'):
+            if not line.strip():
+                processed_lines.append('')  # Keep empty lines for spacing
+                continue
             
-            # Ensure we have at least some line breaks for readability
-            if len(wrapped_lines) == 1 and len(text) > 50:
-                # Force line breaks for long text
-                mid_point = len(text) // 2
-                # Find a good break point (space near middle)
-                for i in range(mid_point - 10, mid_point + 10):
-                    if i < len(text) and text[i] == ' ':
-                        mid_point = i
-                        break
-                wrapped_lines = [text[:mid_point].strip(), text[mid_point:].strip()]
-                print(f"Forced line break: {wrapped_lines}")
-                
-        except Exception as wrap_error:
-            print(f"Error in text wrapping calculation: {wrap_error}")
-            # Fallback to simple wrapping
-            avg_char_width = font_size * 0.6
-            chars_per_line = max(20, int(text_width / avg_char_width))
-            wrapped_lines = textwrap.wrap(text, width=chars_per_line)
+            # For lines that are too long, wrap them intelligently
+            if len(line) > 40:  # If line is very long, wrap it
+                # Calculate optimal wrap width based on font size
+                avg_char_width = font_size * 0.6
+                chars_per_line = max(25, int((text_width * 0.8) / avg_char_width))
+                wrapped = textwrap.wrap(line, width=chars_per_line)
+                processed_lines.extend(wrapped)
+            else:
+                processed_lines.append(line)
         
-        # Calculate total text height with better line spacing
+        print(f"Text wrapping: {len(processed_lines)} lines")
+        
+        # Calculate optimal line height and spacing (same as preview function)
         try:
             # Get actual line height from font metrics
             test_bbox = draw.textbbox((0, 0), "Ay", font=font)  # Use 'Ay' to get proper line height
-            line_height = (test_bbox[3] - test_bbox[1]) + 10  # Add 10px spacing
+            line_height = (test_bbox[3] - test_bbox[1]) + int(font_size * 0.3)  # Add 30% spacing
         except Exception as height_error:
             print(f"Error calculating line height: {height_error}")
             line_height = font_size + 10  # Fallback
         
-        total_text_height = len(wrapped_lines) * line_height
+        total_text_height = len(processed_lines) * line_height
         
         # Center the text vertically
         start_y = max(0, (text_height - total_text_height) // 2)
         
-        print(f"Text layout: {len(wrapped_lines)} lines, line_height={line_height}, total_height={total_text_height}")
+        print(f"Text layout: {len(processed_lines)} lines, line_height={line_height}, total_height={total_text_height}")
         
-        # Draw each line
-        for i, line in enumerate(wrapped_lines):
+        # Draw each line with enhanced visibility
+        for i, line in enumerate(processed_lines):
             # Skip empty lines
             if not line.strip():
                 continue
@@ -790,8 +578,10 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
             x = max(0, (text_width - text_line_width) // 2)
             y = start_y + (i * line_height)
             
-            # Draw text with outline for better visibility
-            outline_width = 2
+            # Draw text with enhanced outline for better visibility
+            outline_width = max(2, font_size // 20)  # Proportional outline
+            
+            # Draw black outline for contrast
             for dx in range(-outline_width, outline_width + 1):
                 for dy in range(-outline_width, outline_width + 1):
                     if dx != 0 or dy != 0:
@@ -808,8 +598,8 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         text_clip = ImageClip(img_array, transparent=True, duration=duration)
         text_clip = text_clip.set_position('center')
         
-        print(f"Created text clip with PIL: {text_width}x{text_height}, {len(wrapped_lines)} lines")
-        print(f"Text content: {wrapped_lines}")
+        print(f"Created text clip with PIL: {text_width}x{text_height}, {len(processed_lines)} lines")
+        print(f"Text content: {processed_lines}")
         print(f"Text clip final dimensions: {text_clip.w}x{text_clip.h}, duration: {text_clip.duration}s")
         return text_clip
         
@@ -828,327 +618,9 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         print("Created fallback colored rectangle")
         return fallback_clip
 
-def create_text_clip_with_moviepy(text, video_width, video_height, font_size, text_color, duration):
-    """Create a high-quality text clip using MoviePy's TextClip with ImageMagick"""
-    try:
-        import textwrap
-        print(f"Attempting MoviePy TextClip: text='{text[:50]}...', size={video_width}x{video_height}, font_size={font_size}, color={text_color}")
-        
-        # Ensure text is properly formatted
-        if not text or not text.strip():
-            print("Warning: Empty or whitespace-only text provided")
-            text = "No text provided"
-        
-        # Normalize text
-        text = text.strip()
-        import re
-        text = re.sub(r'\s+', ' ', text)
-        
-        # Calculate optimal text width for wrapping
-        text_width_chars = int((video_width * 0.8) / (font_size * 0.6))
-        wrapped_lines = textwrap.wrap(text, width=max(20, text_width_chars))
-        formatted_text = '\n'.join(wrapped_lines)
-        
-        # Get actually available fonts
-        available_font_files = get_available_fonts()
-        
-        # Railway-compatible font options - start with detected fonts
-        font_options = available_font_files[:5]  # Try first 5 detected fonts
-        
-        # Add generic font names as fallback
-        font_options.extend([
-            'DejaVu-Sans',
-            'Liberation-Sans', 
-            'Ubuntu',
-            'Arial',
-            'Helvetica',
-            'sans-serif'  # Generic fallback
-        ])
-        
-        # Try each font option
-        text_clip = None
-        for font_option in font_options:
-            try:
-                print(f"🔤 Trying font: {font_option}")
-                
-                # Simpler TextClip parameters for better compatibility
-                text_clip = TextClip(
-                    formatted_text,
-                    fontsize=font_size,
-                    color=text_color,
-                    font=font_option
-                ).set_duration(duration).set_position('center')
-                
-                print(f"✅ Successfully created TextClip with: {font_option}")
-                return text_clip
-                
-            except Exception as e:
-                print(f"❌ Failed with {font_option}: {str(e)[:100]}...")
-                continue
-        
-        # If all MoviePy options failed, fallback to enhanced PIL
-        print("⚠️ All MoviePy font options failed, using enhanced PIL rendering")
-        return create_enhanced_pil_text_clip(text, video_width, video_height, font_size, text_color, duration)
-        
-    except Exception as e:
-        print(f"❌ Error in MoviePy text creation: {e}")
-        import traceback
-        traceback.print_exc()
-        # Fallback to enhanced PIL
-        return create_enhanced_pil_text_clip(text, video_width, video_height, font_size, text_color, duration)
+# Removed unused MoviePy text clip function
 
-def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, text_color, duration):
-    """Enhanced PIL text rendering with better quality settings and extensive debugging"""
-    try:
-        from moviepy.video.VideoClip import ImageClip
-        import textwrap
-        
-        print(f"🔍 DEBUG: Creating enhanced PIL text clip")
-        print(f"🔍 DEBUG: Input - text='{text[:50]}...', size={video_width}x{video_height}, font_size={font_size}, color={text_color}")
-        
-        # Ensure text is properly formatted
-        if not text or not text.strip():
-            print("⚠️ Warning: Empty or whitespace-only text provided")
-            text = "No text provided"
-        
-        # Normalize text
-        text = text.strip()
-        import re
-        text = re.sub(r'\s+', ' ', text)
-        print(f"🔍 DEBUG: Normalized text: '{text}'")
-        
-        # Render at 4x resolution for much better quality
-        scale_factor = 4
-        text_width = int(video_width * 0.9 * scale_factor)
-        text_height = int(video_height * 0.8 * scale_factor)
-        scaled_font_size = font_size * scale_factor
-        
-        print(f"🔍 DEBUG: Scaled dimensions: {text_width}x{text_height}, font_size={scaled_font_size}")
-        
-        # Create high-resolution image with WHITE background for debugging
-        img = Image.new('RGBA', (text_width, text_height), (255, 255, 255, 255))  # White background
-        draw = ImageDraw.Draw(img)
-        
-        # Parse color - handle hex colors like '#ffffff' or named colors like 'white'
-        if text_color.startswith('#'):
-            text_color = text_color.lstrip('#')
-            color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
-        else:
-            color_map = {
-                'white': (255, 255, 255), 'black': (0, 0, 0), 'red': (255, 0, 0),
-                'green': (0, 255, 0), 'blue': (0, 0, 255), 'yellow': (255, 255, 0),
-                'cyan': (0, 255, 255), 'magenta': (255, 0, 255)
-            }
-            color_rgb = color_map.get(text_color.lower(), (255, 255, 255))
-        
-        print(f"🔍 DEBUG: Color RGB: {color_rgb}")
-        
-        # Use our bundled high-quality fonts first
-        available_fonts = get_available_fonts()
-        font = None
-        
-        if available_fonts:
-            for font_path in available_fonts[:3]:  # Try first 3 fonts
-                try:
-                    font = ImageFont.truetype(font_path, scaled_font_size)
-                    print(f"✅ Using high-quality font: {os.path.basename(font_path)} at size {scaled_font_size}")
-                    break
-                except Exception as e:
-                    print(f"❌ Failed to load {font_path}: {e}")
-                    continue
-        
-        if font is None:
-            print("⚠️ No TrueType fonts available, using default font")
-            font = ImageFont.load_default()
-            scaled_font_size = max(scaled_font_size * 2, 100)
-        
-        # Text wrapping with better calculations
-        avg_char_width = scaled_font_size * 0.6
-        chars_per_line = max(20, int(text_width / avg_char_width))
-        wrapped_lines = textwrap.wrap(text, width=chars_per_line)
-        
-        print(f"🔍 DEBUG: Wrapped into {len(wrapped_lines)} lines: {wrapped_lines}")
-        
-        # Calculate layout
-        line_height = int(scaled_font_size * 1.2)
-        total_text_height = len(wrapped_lines) * line_height
-        start_y = max(0, (text_height - total_text_height) // 2)
-        
-        print(f"🔍 DEBUG: Layout - line_height={line_height}, total_height={total_text_height}, start_y={start_y}")
-        
-        # Draw each line with debugging
-        for i, line in enumerate(wrapped_lines):
-            if not line.strip():
-                continue
-            
-            bbox = draw.textbbox((0, 0), line, font=font)
-            text_line_width = bbox[2] - bbox[0]
-            x = max(0, (text_width - text_line_width) // 2)
-            y = start_y + (i * line_height)
-            
-            print(f"🔍 DEBUG: Drawing line {i+1}: '{line}' at ({x}, {y})")
-            
-            # Draw text with BLACK outline for maximum visibility
-            outline_width = 4 * scale_factor
-            for dx in range(-outline_width, outline_width + 1):
-                for dy in range(-outline_width, outline_width + 1):
-                    if dx != 0 or dy != 0:
-                        draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 255))  # Black outline
-            
-            # Draw main text in the specified color
-            draw.text((x, y), line, font=font, fill=(*color_rgb, 255))
-            print(f"✅ Drew line {i+1} with color {color_rgb}")
-        
-        # Save debug image to see what we're creating
-        debug_path = os.path.join('temp', f'debug_text_{uuid.uuid4().hex[:8]}.png')
-        os.makedirs('temp', exist_ok=True)
-        img.save(debug_path)
-        print(f"🔍 DEBUG: Saved text image to {debug_path}")
-        
-        # Resize back to original resolution with high-quality resampling
-        final_width = int(video_width * 0.9)
-        final_height = int(video_height * 0.8)
-        img = img.resize((final_width, final_height), Image.LANCZOS)
-        
-        print(f"🔍 DEBUG: Final image size: {img.size}")
-        
-        # Convert to numpy array
-        img_array = np.array(img)
-        print(f"🔍 DEBUG: Image array shape: {img_array.shape}")
-        print(f"🔍 DEBUG: Image array min/max values: {img_array.min()}/{img_array.max()}")
-        
-        # Create ImageClip
-        text_clip = ImageClip(img_array, transparent=True, duration=duration)
-        text_clip = text_clip.set_position('center')
-        
-        print(f"✅ Created enhanced PIL text clip: {final_width}x{final_height}")
-        return text_clip
-        
-    except Exception as e:
-        print(f"❌ Error creating enhanced PIL text: {e}")
-        import traceback
-        traceback.print_exc()
-        # Ultimate fallback
-        return create_text_clip_with_pil(text, video_width, video_height, font_size, text_color, duration)
-
-def create_simple_visible_text_clip(text, video_width, video_height, font_size, text_color, duration):
-    """Create a simple, guaranteed-visible text clip using PIL with proper fonts"""
-    try:
-        from moviepy.video.VideoClip import ImageClip
-        import textwrap
-        
-        print(f"🎯 Creating SIMPLE visible text: '{text[:50]}...'")
-        
-        # Ensure text is properly formatted
-        if not text or not text.strip():
-            text = "No text provided"
-        
-        text = text.strip()
-        import re
-        text = re.sub(r'\s+', ' ', text)
-        
-        # Use a reasonable text area
-        text_width = int(video_width * 0.8)
-        text_height = int(video_height * 0.6)
-        
-        # Create image with transparent background
-        img = Image.new('RGBA', (text_width, text_height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        
-        # Parse color
-        if text_color.startswith('#'):
-            text_color = text_color.lstrip('#')
-            color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
-        else:
-            color_rgb = (255, 255, 255)  # Default to white
-        
-        # Try to load proper fonts that will be available in Docker
-        font = None
-        font_paths = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
-            '/usr/share/fonts/truetype/roboto/Roboto-Bold.ttf',
-            '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/TTF/LiberationSans-Bold.ttf'
-        ]
-        
-        effective_font_size = max(font_size * 2, 60)  # Reasonable size
-        
-        for font_path in font_paths:
-            if os.path.exists(font_path):
-                try:
-                    font = ImageFont.truetype(font_path, effective_font_size)
-                    print(f"✅ Using proper font: {os.path.basename(font_path)}")
-                    break
-                except Exception as e:
-                    print(f"❌ Failed to load {font_path}: {e}")
-                    continue
-        
-        if font is None:
-            print("⚠️ No proper fonts found, using default font")
-            font = ImageFont.load_default()
-            effective_font_size = max(font_size * 3, 80)  # Make default font larger
-        
-        # Simple text wrapping
-        avg_char_width = effective_font_size * 0.6
-        chars_per_line = max(15, int(text_width / avg_char_width))
-        wrapped_lines = textwrap.wrap(text, width=chars_per_line)
-        
-        print(f"📝 Wrapped into {len(wrapped_lines)} lines")
-        
-        # Calculate layout
-        line_height = effective_font_size + 20
-        total_text_height = len(wrapped_lines) * line_height
-        start_y = max(0, (text_height - total_text_height) // 2)
-        
-        # Draw each line with maximum visibility
-        for i, line in enumerate(wrapped_lines):
-            if not line.strip():
-                continue
-            
-            # Get text dimensions
-            bbox = draw.textbbox((0, 0), line, font=font)
-            text_line_width = bbox[2] - bbox[0]
-            x = max(0, (text_width - text_line_width) // 2)
-            y = start_y + (i * line_height)
-            
-            print(f"✍️ Drawing line {i+1}: '{line}' at ({x}, {y})")
-            
-            # Draw THICK black outline for maximum visibility
-            outline_width = 6
-            for dx in range(-outline_width, outline_width + 1):
-                for dy in range(-outline_width, outline_width + 1):
-                    if dx != 0 or dy != 0:
-                        draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 255))
-            
-            # Draw main text
-            draw.text((x, y), line, font=font, fill=(*color_rgb, 255))
-        
-        # Convert to numpy array
-        img_array = np.array(img)
-        
-        # Create ImageClip
-        text_clip = ImageClip(img_array, transparent=True, duration=duration)
-        text_clip = text_clip.set_position('center')
-        
-        print(f"✅ Created simple visible text clip: {text_width}x{text_height}")
-        return text_clip
-        
-    except Exception as e:
-        print(f"❌ Error in simple text creation: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # Ultimate fallback - just a colored rectangle with text
-        from moviepy.video.VideoClip import ColorClip
-        fallback_clip = ColorClip(
-            size=(int(video_width * 0.8), 200), 
-            color=(255, 255, 255), 
-            duration=duration
-        ).set_position('center')
-        print("⚠️ Created fallback colored rectangle")
-        return fallback_clip
+# Removed unused enhanced PIL and simple visible text clip functions
 
 def create_story_video(poem_text, video_url, audio_url, font_size, text_color, duration, output_path):
     """Create Instagram story video with poem overlay"""
@@ -1224,8 +696,8 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         effective_font_size = max(font_size, min_font_size)
         print(f"Font size: requested={font_size}, effective={effective_font_size}")
         
-        # Create text using simple, guaranteed-visible rendering
-        text_clip = create_simple_visible_text_clip(
+        # Create text using improved PIL rendering with proper formatting
+        text_clip = create_text_clip_with_pil(
             poem_text, 
             video_clip.w, 
             video_clip.h, 
@@ -1392,6 +864,132 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
                 print(f"Warning: Could not clean up temporary file after error {temp_video_path}: {cleanup_error}")
         
         return False
+
+# Removed deprecated create_text_preview_image function
+        text_width = 1080
+        text_height = 1920
+        
+        # Create image with black background
+        img = Image.new('RGB', (text_width, text_height), (0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Parse color
+        if text_color.startswith('#'):
+            text_color = text_color.lstrip('#')
+            color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
+        else:
+            color_rgb = (255, 255, 255)  # Default to white
+        
+        # Calculate effective font size (scale up for better quality)
+        effective_font_size = max(font_size * 2, 80)
+        
+        # Try to load high-quality fonts in order of preference
+        font = None
+        font_paths = [
+            # Bundled font (highest priority)
+            os.path.join(os.path.dirname(__file__), 'static', 'fonts', 'Roboto-Bold.woff2'),
+            # System fonts that are commonly available
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
+            '/usr/share/fonts/truetype/roboto/Roboto-Bold.ttf',
+            '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/TTF/LiberationSans-Bold.ttf',
+            # Additional common paths
+            '/System/Library/Fonts/Helvetica.ttc',  # macOS
+            '/System/Library/Fonts/Arial.ttf',      # macOS
+            'C:/Windows/Fonts/arial.ttf',           # Windows
+            'C:/Windows/Fonts/calibri.ttf',         # Windows
+        ]
+        
+        for font_path in font_paths:
+            if os.path.exists(font_path):
+                try:
+                    font = ImageFont.truetype(font_path, effective_font_size)
+                    print(f"✅ Using high-quality font for preview: {os.path.basename(font_path)}")
+                    break
+                except Exception as e:
+                    print(f"❌ Failed to load {font_path} for preview: {e}")
+                    continue
+        
+        if font is None:
+            print("⚠️ No system fonts found, using default font")
+            font = ImageFont.load_default()
+            effective_font_size = max(font_size * 3, 100)  # Make default font larger
+        
+        # Process text lines with intelligent wrapping
+        processed_lines = []
+        for line in text.split('\n'):
+            if not line.strip():
+                processed_lines.append('')  # Keep empty lines for spacing
+                continue
+            
+            # For lines that are too long, wrap them intelligently
+            if len(line) > 40:  # If line is very long, wrap it
+                # Calculate optimal wrap width based on font size
+                avg_char_width = effective_font_size * 0.6
+                chars_per_line = max(25, int((text_width * 0.8) / avg_char_width))
+                wrapped = textwrap.wrap(line, width=chars_per_line)
+                processed_lines.extend(wrapped)
+            else:
+                processed_lines.append(line)
+        
+        # Calculate optimal line height and spacing
+        # Get actual line height from font metrics
+        test_bbox = draw.textbbox((0, 0), "Ay", font=font)  # Use 'Ay' to get proper line height
+        line_height = (test_bbox[3] - test_bbox[1]) + int(effective_font_size * 0.3)  # Add 30% spacing
+        
+        # Calculate total text height
+        total_text_height = len(processed_lines) * line_height
+        
+        # Center the text vertically
+        start_y = max(0, (text_height - total_text_height) // 2)
+        
+        print(f"📝 Processed into {len(processed_lines)} lines for preview")
+        print(f"📏 Line height: {line_height}, Total height: {total_text_height}")
+        
+        # Draw each line with enhanced visibility
+        for i, line in enumerate(processed_lines):
+            if not line.strip():
+                continue  # Skip empty lines in drawing
+            
+            # Get text dimensions for centering
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_line_width = bbox[2] - bbox[0]
+            text_line_height = bbox[3] - bbox[1]
+            
+            # Center horizontally
+            x = max(0, (text_width - text_line_width) // 2)
+            y = start_y + (i * line_height)
+            
+            print(f"✍️ Drawing line {i+1}: '{line}' at ({x}, {y})")
+            
+            # Draw text with enhanced outline for maximum visibility
+            outline_width = max(3, effective_font_size // 20)  # Proportional outline
+            
+            # Draw black outline for contrast
+            for dx in range(-outline_width, outline_width + 1):
+                for dy in range(-outline_width, outline_width + 1):
+                    if dx != 0 or dy != 0:
+                        draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0))
+            
+            # Draw main text
+            draw.text((x, y), line, font=font, fill=color_rgb)
+        
+        # Save preview image with high quality
+        img.save(output_path, 'PNG', optimize=True)
+        print(f"✅ Saved high-quality text preview image to {output_path}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error creating text preview image: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+# End of deprecated function
+
+# Text preview function moved to utils.py
 
 if __name__ == '__main__':
     # Use environment variable for port, default to 5001 for local development
