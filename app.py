@@ -54,6 +54,49 @@ def cleanup_old_temp_files():
 # Import time module for cleanup
 import time
 
+def get_available_fonts():
+    """Detect available fonts in the current environment"""
+    available_fonts = []
+    
+    # Common font directories to check
+    font_directories = [
+        '/usr/share/fonts/',
+        '/usr/local/share/fonts/',
+        '/System/Library/Fonts/',  # macOS
+        '/Library/Fonts/',         # macOS
+        '/usr/share/fonts/truetype/',
+        '/usr/share/fonts/TTF/',
+        '/usr/share/fonts/opentype/'
+    ]
+    
+    # Font files to look for
+    font_patterns = [
+        '**/DejaVu*Bold*.ttf',
+        '**/Liberation*Bold*.ttf', 
+        '**/Ubuntu*Bold*.ttf',
+        '**/Arial*.ttf',
+        '**/Helvetica*.ttf',
+        '**/Roboto*Bold*.ttf',
+        '**/OpenSans*Bold*.ttf',
+        '**/*Sans*Bold*.ttf',
+        '**/*bold*.ttf',
+        '**/*.ttf'
+    ]
+    
+    import glob
+    
+    for font_dir in font_directories:
+        if os.path.exists(font_dir):
+            for pattern in font_patterns:
+                font_path = os.path.join(font_dir, pattern)
+                matches = glob.glob(font_path, recursive=True)
+                for match in matches[:3]:  # Limit to first 3 matches per pattern
+                    if match not in available_fonts:
+                        available_fonts.append(match)
+    
+    print(f"🔍 Found {len(available_fonts)} font files: {available_fonts[:5]}...")
+    return available_fonts
+
 @app.route('/')
 def index():
     # Clean up old temp files on each request to homepage
@@ -238,17 +281,8 @@ def test_text_rendering():
         except:
             pass
         
-        # Check available fonts
-        available_fonts = []
-        font_paths = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-            '/System/Library/Fonts/Arial.ttf',
-            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
-        ]
-        for font_path in font_paths:
-            if os.path.exists(font_path):
-                available_fonts.append(font_path)
+        # Check available fonts using the detection function
+        available_fonts = get_available_fonts()
         
         return jsonify({
             'status': 'success',
@@ -631,48 +665,35 @@ def create_text_clip_with_moviepy(text, video_width, video_height, font_size, te
         wrapped_lines = textwrap.wrap(text, width=max(20, text_width_chars))
         formatted_text = '\n'.join(wrapped_lines)
         
-        # Railway-compatible font options (use font files instead of names)
-        font_options = [
-            # Try font file paths first (more reliable on Linux)
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
-            # Fallback to font names if files not found
-            'DejaVu-Sans-Bold',
-            'Liberation-Sans-Bold',
-            'Ubuntu-Bold',
-            'Arial-Bold',
-            'Helvetica-Bold'
-        ]
+        # Get actually available fonts
+        available_font_files = get_available_fonts()
+        
+        # Railway-compatible font options - start with detected fonts
+        font_options = available_font_files[:5]  # Try first 5 detected fonts
+        
+        # Add generic font names as fallback
+        font_options.extend([
+            'DejaVu-Sans',
+            'Liberation-Sans', 
+            'Ubuntu',
+            'Arial',
+            'Helvetica',
+            'sans-serif'  # Generic fallback
+        ])
         
         # Try each font option
         text_clip = None
         for font_option in font_options:
             try:
-                # Different approach for file paths vs font names
-                if font_option.startswith('/') and os.path.exists(font_option):
-                    print(f"Trying font file: {font_option}")
-                    # Use font file directly
-                    text_clip = TextClip(
-                        formatted_text,
-                        fontsize=font_size,
-                        color=text_color,
-                        font=font_option,
-                        stroke_color='black',
-                        stroke_width=2
-                    ).set_duration(duration).set_position('center')
-                else:
-                    print(f"Trying font name: {font_option}")
-                    # Use font name with method specification
-                    text_clip = TextClip(
-                        formatted_text,
-                        fontsize=font_size,
-                        color=text_color,
-                        font=font_option,
-                        stroke_color='black',
-                        stroke_width=2,
-                        method='caption' if len(formatted_text) > 50 else 'label'
-                    ).set_duration(duration).set_position('center')
+                print(f"🔤 Trying font: {font_option}")
+                
+                # Simpler TextClip parameters for better compatibility
+                text_clip = TextClip(
+                    formatted_text,
+                    fontsize=font_size,
+                    color=text_color,
+                    font=font_option
+                ).set_duration(duration).set_position('center')
                 
                 print(f"✅ Successfully created TextClip with: {font_option}")
                 return text_clip
@@ -940,33 +961,73 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         # Composite video and text
         final_clip = CompositeVideoClip([video_clip, text_clip])
         
-        # Write output file
+        # Write output file with improved error handling
         try:
+            print(f"📹 Writing video: {output_path}")
+            print(f"📊 Video info: {video_clip.w}x{video_clip.h}, duration: {final_clip.duration}s")
+            
+            # First attempt: full quality with audio
             final_clip.write_videofile(
                 output_path,
                 fps=24,
                 codec='libx264',
                 audio_codec='aac',
                 verbose=False,
-                logger=None
+                logger=None,
+                temp_audiofile='temp_audio.m4a',
+                remove_temp=True
             )
+            print("✅ Video created successfully with audio")
+            
         except Exception as e:
-            print(f"Error writing video with audio: {e}")
-            # Try without audio
+            print(f"❌ Error writing video with audio: {e}")
+            
+            # Second attempt: lower quality settings
             try:
-                # Remove audio and try again
+                print("🔄 Trying with lower quality settings...")
                 final_clip = final_clip.without_audio()
+                
+                # Use more conservative settings for Railway
                 final_clip.write_videofile(
                     output_path,
                     fps=24,
                     codec='libx264',
+                    bitrate='2000k',  # Lower bitrate
                     verbose=False,
-                    logger=None
+                    logger=None,
+                    temp_audiofile=None,
+                    remove_temp=True
                 )
-                print("Video created successfully without audio")
+                print("✅ Video created successfully without audio (lower quality)")
+                
             except Exception as e2:
-                print(f"Error writing video without audio: {e2}")
-                raise e2
+                print(f"❌ Error with lower quality: {e2}")
+                
+                # Third attempt: even more conservative
+                try:
+                    print("🔄 Trying with very conservative settings...")
+                    
+                    # Resize if video is too large (4K might be too much for Railway)
+                    if video_clip.w > 1920 or video_clip.h > 1920:
+                        print(f"📏 Resizing from {video_clip.w}x{video_clip.h} to 1080x1920")
+                        video_clip_resized = video_clip.resize(height=1920)
+                        text_clip_resized = text_clip.resize(height=1920)
+                        final_clip = CompositeVideoClip([video_clip_resized, text_clip_resized])
+                    
+                    final_clip.write_videofile(
+                        output_path,
+                        fps=15,  # Lower FPS
+                        codec='libx264',
+                        preset='ultrafast',  # Fastest encoding
+                        bitrate='1000k',     # Even lower bitrate
+                        verbose=False,
+                        logger=None
+                    )
+                    print("✅ Video created successfully with conservative settings")
+                    
+                except Exception as e3:
+                    print(f"❌ All video writing attempts failed: {e3}")
+                    raise e3
         
         # Clean up
         video_clip.close()
