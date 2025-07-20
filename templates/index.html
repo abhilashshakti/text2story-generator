@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text2Story Generator - Instagram Story Automation</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .loading {
+            display: none;
+        }
+        .loading.show {
+            display: block;
+        }
+        .video-preview {
+            max-width: 200px;
+            max-height: 150px;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-magic text-3xl"></i>
+                    <h1 class="text-2xl font-bold">Text2Story Generator</h1>
+                </div>
+                <div class="text-sm opacity-90">
+                    Instagram Story Automation Tool
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-8">
+        <!-- Welcome Section -->
+        <div class="text-center mb-8">
+            <h2 class="text-3xl font-bold text-gray-800 mb-4">Transform Your Poems into Instagram Stories</h2>
+            <p class="text-gray-600 max-w-2xl mx-auto">
+                Automate your Instagram story creation process. Upload your poem, let AI analyze the theme, 
+                and automatically generate beautiful stories with matching stock videos and audio.
+            </p>
+        </div>
+
+        <!-- Main Form -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Column - Input -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-edit mr-2"></i>Poem Input
+                    </h3>
+                    
+                    <form id="storyForm">
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">
+                                Poem Text *
+                            </label>
+                            <textarea 
+                                id="poemText" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                rows="6" 
+                                placeholder="Enter your poem here..."
+                                required
+                            >Don't bend;
+don't water it down;
+don't try to make it logical;
+don't edit your own soul
+according to the fashion.
+Rather,
+follow your most intense obsessions mercilessly.</textarea>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2">
+                                    Font Size
+                                </label>
+                                <input 
+                                    type="range" 
+                                    id="fontSize" 
+                                    min="30" 
+                                    max="100" 
+                                    value="60"
+                                    class="w-full"
+                                >
+                                <div class="text-center text-sm text-gray-600 mt-1">
+                                    <span id="fontSizeValue">60</span>px
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2">
+                                    Duration (seconds)
+                                </label>
+                                <input 
+                                    type="range" 
+                                    id="duration" 
+                                    min="5" 
+                                    max="30" 
+                                    value="15"
+                                    class="w-full"
+                                >
+                                <div class="text-center text-sm text-gray-600 mt-1">
+                                    <span id="durationValue">15</span>s
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">
+                                Text Color
+                            </label>
+                            <input 
+                                type="color" 
+                                id="textColor" 
+                                value="#FFFFFF"
+                                class="w-full h-12 rounded-md border border-gray-300"
+                            >
+                        </div>
+
+                        <div class="flex space-x-4">
+                            <button 
+                                type="button" 
+                                id="analyzeBtn"
+                                class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-md transition duration-200"
+                            >
+                                <i class="fas fa-brain mr-2"></i>Analyze Theme
+                            </button>
+                            <button 
+                                type="submit"
+                                id="generateBtn"
+                                class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-md transition duration-200"
+                            >
+                                <i class="fas fa-magic mr-2"></i>Generate Story
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Analysis Results -->
+                <div id="analysisResults" class="bg-white rounded-lg shadow-lg p-6 mt-6 card-hover" style="display: none;">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-chart-bar mr-2"></i>Theme Analysis
+                    </h3>
+                    <div id="analysisContent"></div>
+                </div>
+
+                <!-- Media Selection -->
+                <div id="mediaSelection" class="bg-white rounded-lg shadow-lg p-6 mt-6 card-hover" style="display: none;">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-video mr-2"></i>Media Selection
+                    </h3>
+                    
+                    <!-- Video Selection -->
+                    <div class="mb-6">
+                        <h4 class="text-lg font-medium text-gray-700 mb-3">Suggested Videos</h4>
+                        <div id="videoOptions" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    </div>
+
+                    <!-- Audio Selection -->
+                    <div class="mb-6">
+                        <h4 class="text-lg font-medium text-gray-700 mb-3">Suggested Audio</h4>
+                        <div id="audioOptions" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    </div>
+
+                    <!-- Selection Status -->
+                    <div class="border-t pt-4 mb-4">
+                        <h4 class="text-lg font-medium text-gray-700 mb-3">Current Selection</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="p-3 bg-gray-50 rounded-lg">
+                                <h5 class="font-medium text-sm text-gray-700 mb-1">Video</h5>
+                                <p id="selectedVideoText" class="text-sm text-gray-600">
+                                    None selected
+                                </p>
+                            </div>
+                            <div class="p-3 bg-gray-50 rounded-lg">
+                                <h5 class="font-medium text-sm text-gray-700 mb-1">Audio</h5>
+                                <p id="selectedAudioText" class="text-sm text-gray-600">
+                                    None selected
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Custom Media Search -->
+                    <div class="border-t pt-4">
+                        <h4 class="text-lg font-medium text-gray-700 mb-3">Search Custom Media</h4>
+                        <div class="flex space-x-2">
+                            <input 
+                                type="text" 
+                                id="mediaSearch" 
+                                placeholder="Search for videos or audio..."
+                                class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                            <button 
+                                id="searchMediaBtn"
+                                class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md transition duration-200"
+                            >
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                        <div id="searchResults" class="mt-4"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column - Settings & Status -->
+            <div class="space-y-6">
+                <!-- Google Sheets Integration -->
+                <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-table mr-2"></i>Google Sheets
+                    </h3>
+                    
+                    <div class="space-y-4">
+                        <button 
+                            id="createSheetBtn"
+                            class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-md transition duration-200"
+                        >
+                            <i class="fas fa-plus mr-2"></i>Create New Sheet
+                        </button>
+                        
+                        <button 
+                            id="viewPoemsBtn"
+                            class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition duration-200"
+                        >
+                            <i class="fas fa-list mr-2"></i>View All Poems
+                        </button>
+                        
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="saveToSheets" class="rounded">
+                            <label for="saveToSheets" class="text-sm text-gray-700">Save to Google Sheets</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Generation Status -->
+                <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-cog mr-2"></i>Status
+                    </h3>
+                    
+                    <div id="status" class="text-sm text-gray-600">
+                        Ready to generate stories
+                    </div>
+                    
+                    <div id="loading" class="loading mt-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                            <span>Processing...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Generations -->
+                <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-history mr-2"></i>Recent Stories
+                    </h3>
+                    
+                    <div id="recentStories" class="space-y-2">
+                        <p class="text-sm text-gray-500">No stories generated yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div id="poemsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto">
+                <div class="p-6 border-b">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-xl font-semibold">All Poems</h3>
+                        <button id="closePoemsModal" class="text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div id="poemsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Preview Modal -->
+    <div id="videoPreviewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg max-w-4xl w-full">
+                <div class="p-6 border-b">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-xl font-semibold">Video Preview</h3>
+                        <button id="closeVideoModal" class="text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative">
+                        <video id="videoPreview" controls class="w-full h-full">
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h4 id="videoPreviewTitle" class="font-semibold text-lg"></h4>
+                            <p id="videoPreviewInfo" class="text-gray-600"></p>
+                        </div>
+                        <button id="selectVideoBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md transition duration-200">
+                            Select This Video
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Preview Modal -->
+    <div id="audioPreviewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg max-w-2xl w-full">
+                <div class="p-6 border-b">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-xl font-semibold">Audio Preview</h3>
+                        <button id="closeAudioModal" class="text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="bg-gray-100 rounded-lg p-8 mb-4 flex items-center justify-center relative">
+                        <i class="fas fa-music text-4xl text-gray-400"></i>
+                    </div>
+                    <div class="mb-4">
+                        <audio id="audioPreview" controls class="w-full">
+                            Your browser does not support the audio tag.
+                        </audio>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h4 id="audioPreviewTitle" class="font-semibold text-lg"></h4>
+                            <p id="audioPreviewInfo" class="text-gray-600"></p>
+                        </div>
+                        <button id="selectAudioBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md transition duration-200">
+                            Select This Audio
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        // Global variables
+        let selectedVideo = null;
+        let selectedAudio = null;
+        let currentAnalysis = null;
+
+        // DOM elements
+        const poemText = document.getElementById('poemText');
+        const fontSize = document.getElementById('fontSize');
+        const fontSizeValue = document.getElementById('fontSizeValue');
+        const duration = document.getElementById('duration');
+        const durationValue = document.getElementById('durationValue');
+        const textColor = document.getElementById('textColor');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const generateBtn = document.getElementById('generateBtn');
+        const analysisResults = document.getElementById('analysisResults');
+        const analysisContent = document.getElementById('analysisContent');
+        const mediaSelection = document.getElementById('mediaSelection');
+        const videoOptions = document.getElementById('videoOptions');
+        const audioOptions = document.getElementById('audioOptions');
+        const status = document.getElementById('status');
+        const loading = document.getElementById('loading');
+        const recentStories = document.getElementById('recentStories');
+
+        // Event listeners
+        fontSize.addEventListener('input', () => {
+            fontSizeValue.textContent = fontSize.value;
+        });
+
+        duration.addEventListener('input', () => {
+            durationValue.textContent = duration.value;
+        });
+
+        analyzeBtn.addEventListener('click', analyzePoem);
+        generateBtn.addEventListener('click', generateStory);
+        document.getElementById('createSheetBtn').addEventListener('click', createSheet);
+        document.getElementById('viewPoemsBtn').addEventListener('click', viewPoems);
+        document.getElementById('closePoemsModal').addEventListener('click', closePoemsModal);
+        document.getElementById('closeVideoModal').addEventListener('click', closeVideoModal);
+        document.getElementById('closeAudioModal').addEventListener('click', closeAudioModal);
+        document.getElementById('selectVideoBtn').addEventListener('click', selectVideoFromPreview);
+        document.getElementById('selectAudioBtn').addEventListener('click', selectAudioFromPreview);
+
+        async function analyzePoem() {
+            const text = poemText.value.trim();
+            if (!text) {
+                alert('Please enter a poem first');
+                return;
+            }
+
+            showLoading('Analyzing poem theme...');
+            
+            try {
+                const response = await axios.post('/analyze-poem', {
+                    poem_text: text
+                });
+
+                if (response.data.success) {
+                    currentAnalysis = response.data;
+                    displayAnalysis(response.data);
+                    displayMediaOptions(response.data);
+                    showSuccess('Theme analysis completed!');
+                }
+            } catch (error) {
+                showError('Error analyzing poem: ' + error.response?.data?.error || error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayAnalysis(data) {
+            const analysis = data.theme_analysis;
+            
+            analysisContent.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h4 class="font-semibold text-gray-700 mb-2">Themes</h4>
+                        <div class="flex flex-wrap gap-2">
+                            ${analysis.themes.map(theme => 
+                                `<span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm">${theme}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 mb-2">Mood</h4>
+                        <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">${analysis.mood}</span>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 mb-2">Color Palette</h4>
+                        <p class="text-gray-600">${analysis.color_palette}</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 mb-2">Audio Suggestions</h4>
+                        <div class="flex flex-wrap gap-2">
+                            ${analysis.audio_suggestions.map(suggestion => 
+                                `<span class="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-sm">${suggestion}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            analysisResults.style.display = 'block';
+        }
+
+        function displayMediaOptions(data) {
+            console.log('Displaying media options with data:', data);
+            console.log('Suggested videos:', data.suggested_videos);
+            console.log('Suggested audio:', data.suggested_audio);
+            
+            // Display video options
+            videoOptions.innerHTML = data.suggested_videos.map(video => `
+                <div class="border rounded-lg p-3 hover:bg-gray-50 transition-all duration-200 ${selectedVideo?.id === video.id ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200'}">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-16 h-12 bg-gray-200 rounded flex items-center justify-center">
+                            <i class="fas fa-video text-gray-500"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h5 class="font-medium text-sm">${video.title}</h5>
+                            <p class="text-xs text-gray-500">${video.duration}s • ${video.source}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="previewVideo('${video.id}')" 
+                                    class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs transition duration-200">
+                                <i class="fas fa-play mr-1"></i>Preview
+                            </button>
+                            ${selectedVideo && String(selectedVideo.id) === String(video.id) ? 
+                                '<button onclick="deselectVideo()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs transition duration-200"><i class="fas fa-times mr-1"></i>Deselect</button>' : 
+                                '<button onclick="selectVideo(\'' + video.id + '\')" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition duration-200"><i class="fas fa-check mr-1"></i>Select</button>'
+                            }
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Display audio options
+            audioOptions.innerHTML = data.suggested_audio.map(audio => `
+                <div class="border rounded-lg p-3 hover:bg-gray-50 transition-all duration-200 ${selectedAudio?.id === audio.id ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200'}">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-16 h-12 bg-gray-200 rounded flex items-center justify-center">
+                            <i class="fas fa-music text-gray-500"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h5 class="font-medium text-sm">${audio.title}</h5>
+                            <p class="text-xs text-gray-500">${audio.duration}s • ${audio.source}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="previewAudio('${audio.id}')" 
+                                    class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs transition duration-200">
+                                <i class="fas fa-play mr-1"></i>Preview
+                            </button>
+                            ${selectedAudio && String(selectedAudio.id) === String(audio.id) ? 
+                                '<button onclick="deselectAudio()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs transition duration-200"><i class="fas fa-times mr-1"></i>Deselect</button>' : 
+                                '<button onclick="selectAudio(\'' + audio.id + '\')" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition duration-200"><i class="fas fa-check mr-1"></i>Select</button>'
+                            }
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            mediaSelection.style.display = 'block';
+        }
+
+        function selectVideo(videoId) {
+            console.log('selectVideo called with:', videoId);
+            selectedVideo = currentAnalysis.suggested_videos.find(v => String(v.id) === String(videoId));
+            console.log('Selected video:', selectedVideo);
+            displayMediaOptions(currentAnalysis);
+            updateSelectionStatus();
+        }
+
+        function selectAudio(audioId) {
+            console.log('selectAudio called with:', audioId);
+            selectedAudio = currentAnalysis.suggested_audio.find(a => String(a.id) === String(audioId));
+            console.log('Selected audio:', selectedAudio);
+            displayMediaOptions(currentAnalysis);
+            updateSelectionStatus();
+        }
+
+        function updateSelectionStatus() {
+            const videoText = document.getElementById('selectedVideoText');
+            const audioText = document.getElementById('selectedAudioText');
+            
+            if (videoText) {
+                videoText.textContent = selectedVideo ? selectedVideo.title : 'None selected';
+            }
+            if (audioText) {
+                audioText.textContent = selectedAudio ? selectedAudio.title : 'None selected';
+            }
+        }
+
+        // Preview functions
+        function previewVideo(videoId) {
+            console.log('Looking for video with ID:', videoId);
+            console.log('Available videos:', currentAnalysis.suggested_videos);
+            console.log('Video IDs:', currentAnalysis.suggested_videos.map(v => v.id));
+            
+            const video = currentAnalysis.suggested_videos.find(v => String(v.id) === String(videoId));
+            if (!video) {
+                console.error('Video not found:', videoId);
+                return;
+            }
+
+            console.log('Previewing video:', video);
+
+            const videoPreview = document.getElementById('videoPreview');
+            const videoPreviewTitle = document.getElementById('videoPreviewTitle');
+            const videoPreviewInfo = document.getElementById('videoPreviewInfo');
+
+            // Try to load the video through our proxy
+            const proxyUrl = `/proxy-media?url=${encodeURIComponent(video.url)}&type=video`;
+            console.log('Loading video via proxy:', proxyUrl);
+            videoPreview.src = proxyUrl;
+            videoPreviewTitle.textContent = video.title;
+            videoPreviewInfo.textContent = `${video.duration}s • ${video.source}`;
+
+            // Store the video ID for selection
+            videoPreview.dataset.videoId = videoId;
+
+            // Add error handling
+            videoPreview.onerror = function() {
+                console.error('Error loading video:', video.url);
+                // Show a fallback message but keep the video element
+                const videoContainer = document.querySelector('#videoPreviewModal .aspect-video');
+                const fallbackDiv = document.createElement('div');
+                fallbackDiv.className = 'absolute inset-0 flex items-center justify-center bg-gray-100';
+                fallbackDiv.innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-video text-4xl text-gray-400 mb-4"></i>
+                        <p class="text-gray-600">Video Preview</p>
+                        <p class="text-sm text-gray-500 mt-2">Duration: ${video.duration}s • Source: ${video.source}</p>
+                        <p class="text-sm text-gray-500">This video will be used for story generation</p>
+                        <button onclick="selectVideoFromPreview()" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+                            Select This Video
+                        </button>
+                    </div>
+                `;
+                videoContainer.appendChild(fallbackDiv);
+            };
+
+            document.getElementById('videoPreviewModal').classList.remove('hidden');
+        }
+
+        function previewAudio(audioId) {
+            console.log('Looking for audio with ID:', audioId);
+            console.log('Available audio:', currentAnalysis.suggested_audio);
+            console.log('Audio IDs:', currentAnalysis.suggested_audio.map(a => a.id));
+            
+            const audio = currentAnalysis.suggested_audio.find(a => String(a.id) === String(audioId));
+            if (!audio) {
+                console.error('Audio not found:', audioId);
+                return;
+            }
+
+            console.log('Previewing audio:', audio);
+
+            const audioPreview = document.getElementById('audioPreview');
+            const audioPreviewTitle = document.getElementById('audioPreviewTitle');
+            const audioPreviewInfo = document.getElementById('audioPreviewInfo');
+
+            // Try to load the audio through our proxy
+            const proxyUrl = `/proxy-media?url=${encodeURIComponent(audio.url)}&type=audio`;
+            console.log('Loading audio via proxy:', proxyUrl);
+            audioPreview.src = proxyUrl;
+            audioPreviewTitle.textContent = audio.title;
+            audioPreviewInfo.textContent = `${audio.duration}s • ${audio.source}`;
+
+            // Store the audio ID for selection
+            audioPreview.dataset.audioId = audioId;
+
+            // Add error handling
+            audioPreview.onerror = function() {
+                console.error('Error loading audio:', audio.url);
+                // Show a fallback message but keep the audio element
+                const audioContainer = document.querySelector('#audioPreviewModal .bg-gray-100');
+                const fallbackDiv = document.createElement('div');
+                fallbackDiv.className = 'absolute inset-0 flex items-center justify-center bg-gray-100';
+                fallbackDiv.innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-music text-4xl text-gray-400 mb-4"></i>
+                        <p class="text-gray-600">Preview not available</p>
+                        <p class="text-sm text-gray-500 mt-2">This audio can still be used for story generation</p>
+                    </div>
+                `;
+                audioContainer.appendChild(fallbackDiv);
+            };
+
+            document.getElementById('audioPreviewModal').classList.remove('hidden');
+        }
+
+        function selectVideoFromPreview() {
+            const videoId = document.getElementById('videoPreview').dataset.videoId;
+            if (videoId) {
+                selectVideo(videoId);
+                closeVideoModal();
+            }
+        }
+
+        function selectAudioFromPreview() {
+            const audioId = document.getElementById('audioPreview').dataset.audioId;
+            if (audioId) {
+                selectAudio(audioId);
+                closeAudioModal();
+            }
+        }
+
+        function closeVideoModal() {
+            const videoPreview = document.getElementById('videoPreview');
+            const videoContainer = document.querySelector('#videoPreviewModal .aspect-video');
+            
+            // Clean up video
+            videoPreview.pause();
+            videoPreview.src = '';
+            
+            // Remove any fallback messages
+            const fallbackDivs = videoContainer.querySelectorAll('.absolute');
+            fallbackDivs.forEach(div => div.remove());
+            
+            document.getElementById('videoPreviewModal').classList.add('hidden');
+        }
+
+        function closeAudioModal() {
+            const audioPreview = document.getElementById('audioPreview');
+            const audioContainer = document.querySelector('#audioPreviewModal .bg-gray-100');
+            
+            // Clean up audio
+            audioPreview.pause();
+            audioPreview.src = '';
+            
+            // Remove any fallback messages
+            const fallbackDivs = audioContainer.querySelectorAll('.absolute');
+            fallbackDivs.forEach(div => div.remove());
+            
+            document.getElementById('audioPreviewModal').classList.add('hidden');
+        }
+
+        function deselectVideo() {
+            selectedVideo = null;
+            displayMediaOptions(currentAnalysis);
+            updateSelectionStatus();
+        }
+
+        function deselectAudio() {
+            selectedAudio = null;
+            displayMediaOptions(currentAnalysis);
+            updateSelectionStatus();
+        }
+
+        async function generateStory() {
+            const text = poemText.value.trim();
+            if (!text) {
+                alert('Please enter a poem first');
+                return;
+            }
+
+            showLoading('Generating story...');
+            
+            try {
+                const response = await axios.post('/generate-story', {
+                    poem_text: text,
+                    video_url: selectedVideo?.url || '',
+                    audio_url: selectedAudio?.url || '',
+                    font_size: parseInt(fontSize.value),
+                    text_color: textColor.value,
+                    duration: parseInt(duration.value),
+                    save_to_sheets: document.getElementById('saveToSheets').checked
+                });
+
+                if (response.data.success) {
+                    showSuccess('Story generated successfully!');
+                    addToRecentStories(response.data.output_file);
+                    // Auto-download the file
+                    window.open(`/download/${response.data.output_file}`, '_blank');
+                }
+            } catch (error) {
+                showError('Error generating story: ' + error.response?.data?.error || error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function createSheet() {
+            try {
+                const response = await axios.post('/sheets/create', {
+                    sheet_name: 'Poem Stories'
+                });
+
+                if (response.data.success) {
+                    showSuccess('Google Sheet created!');
+                    window.open(response.data.sheet_url, '_blank');
+                }
+            } catch (error) {
+                showError('Error creating sheet: ' + error.response?.data?.error || error.message);
+            }
+        }
+
+        async function viewPoems() {
+            try {
+                const response = await axios.get('/sheets/poems');
+                
+                if (response.data.success) {
+                    displayPoems(response.data.poems);
+                    document.getElementById('poemsModal').classList.remove('hidden');
+                }
+            } catch (error) {
+                showError('Error loading poems: ' + error.response?.data?.error || error.message);
+            }
+        }
+
+        function displayPoems(poems) {
+            const poemsList = document.getElementById('poemsList');
+            
+            if (poems.length === 0) {
+                poemsList.innerHTML = '<p class="text-gray-500">No poems found</p>';
+                return;
+            }
+
+            poemsList.innerHTML = poems.map(poem => `
+                <div class="border rounded-lg p-4 mb-4">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h4 class="font-semibold text-gray-800">${poem['Poem Text'].substring(0, 100)}...</h4>
+                            <p class="text-sm text-gray-600 mt-1">Date: ${poem['Date']}</p>
+                            <p class="text-sm text-gray-600">Status: <span class="font-medium ${poem['Status'] === 'Pending' ? 'text-yellow-600' : 'text-green-600'}">${poem['Status']}</span></p>
+                        </div>
+                        <button onclick="loadPoem('${poem['Poem Text'].replace(/'/g, "\\'")}')" 
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm">
+                            Load
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function loadPoem(text) {
+            poemText.value = text;
+            closePoemsModal();
+            analyzePoem();
+        }
+
+        function closePoemsModal() {
+            document.getElementById('poemsModal').classList.add('hidden');
+        }
+
+        function addToRecentStories(filename) {
+            const stories = recentStories.querySelectorAll('.story-item');
+            if (stories.length >= 5) {
+                stories[stories.length - 1].remove();
+            }
+
+            const storyItem = document.createElement('div');
+            storyItem.className = 'story-item flex justify-between items-center p-2 bg-gray-50 rounded';
+            storyItem.innerHTML = `
+                <span class="text-sm text-gray-700">${filename}</span>
+                <a href="/download/${filename}" class="text-blue-500 hover:text-blue-700 text-sm">
+                    <i class="fas fa-download"></i>
+                </a>
+            `;
+
+            recentStories.insertBefore(storyItem, recentStories.firstChild);
+        }
+
+        function showLoading(message) {
+            status.textContent = message;
+            loading.classList.add('show');
+        }
+
+        function hideLoading() {
+            loading.classList.remove('show');
+        }
+
+        function showSuccess(message) {
+            status.textContent = message;
+            status.className = 'text-sm text-green-600';
+            setTimeout(() => {
+                status.textContent = 'Ready to generate stories';
+                status.className = 'text-sm text-gray-600';
+            }, 3000);
+        }
+
+        function showError(message) {
+            status.textContent = message;
+            status.className = 'text-sm text-red-600';
+            setTimeout(() => {
+                status.textContent = 'Ready to generate stories';
+                status.className = 'text-sm text-gray-600';
+            }, 5000);
+        }
+    </script>
+</body>
+</html> 

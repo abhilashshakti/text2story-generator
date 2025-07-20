@@ -1,0 +1,8 @@
+Flask==2.3.3
+moviepy==1.0.3
+Pillow>=10.0.0
+requests==2.31.0
+python-dotenv==1.0.0
+openai==1.3.0
+pexels-api==1.0.1
+pixabay==0.0.5 
