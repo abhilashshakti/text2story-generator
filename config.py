@@ -13,8 +13,8 @@ class Config:
     # Pexels API
     PEXELS_API_KEY = os.environ.get('PEXELS_API_KEY')
     
-    # Pixabay API
-    PIXABAY_API_KEY = os.environ.get('PIXABAY_API_KEY')
+    # Jamendo Music API (for free music)
+    JAMENDO_API_KEY = os.environ.get('JAMENDO_API_KEY')
     
     # Google Sheets API
     GOOGLE_SHEETS_CREDENTIALS = os.environ.get('GOOGLE_SHEETS_CREDENTIALS')

@@ -6,7 +6,7 @@ A comprehensive Instagram story automation tool that transforms poems into beaut
 
 ### Core Functionality
 - **AI Theme Analysis**: Uses OpenAI GPT to analyze poem themes, mood, and suggest appropriate visual/audio elements
-- **Stock Media Integration**: Automatically fetches relevant videos from Pexels and audio from Pixabay based on theme analysis
+- **Stock Media Integration**: Automatically fetches relevant videos from Pexels and audio from multiple sources based on theme analysis
 - **Video Generation**: Creates Instagram stories with poem text overlaid on background videos with music
 - **Google Sheets Management**: Organize and track all your poems and generated stories
 
@@ -25,7 +25,7 @@ A comprehensive Instagram story automation tool that transforms poems into beaut
 | Frontend | HTML, Tailwind CSS, JavaScript |
 | Video Processing | MoviePy, FFmpeg |
 | AI Analysis | OpenAI GPT-3.5 |
-| Stock Media | Pexels API, Pixabay API |
+| Stock Media | Pexels API, Jamendo API, Spotify API |
 | Data Management | Google Sheets API |
 | Deployment | Railway, Replit, or AWS Lambda |
 
@@ -36,7 +36,8 @@ A comprehensive Instagram story automation tool that transforms poems into beaut
 - API keys for:
   - OpenAI
   - Pexels
-  - Pixabay
+  - Jamendo (optional)
+  - Spotify (optional)
   - Google Sheets (optional)
 
 ## 🚀 Installation
@@ -83,10 +84,25 @@ A comprehensive Instagram story automation tool that transforms poems into beaut
 2. Sign up and get your API key
 3. Add to `.env`: `PEXELS_API_KEY=your-key-here`
 
-### Pixabay API
-1. Go to [Pixabay API](https://pixabay.com/api/docs/)
-2. Sign up and get your API key
-3. Add to `.env`: `PIXABAY_API_KEY=your-key-here`
+### Jamendo API (Optional)
+1. Go to [Jamendo Developer Portal](https://developer.jamendo.com/)
+2. Sign up for a free account
+3. Create a new application
+4. Copy your API key
+5. Add to `.env`: `JAMENDO_API_KEY=your-key-here`
+
+### Spotify API (Optional)
+1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. Log in with your Spotify account
+3. Click "Create App"
+4. Fill in app details (name, description)
+5. Accept terms and create
+6. Copy Client ID and Client Secret
+7. Add to `.env`:
+   ```
+   SPOTIFY_CLIENT_ID=your-client-id
+   SPOTIFY_CLIENT_SECRET=your-client-secret
+   ```
 
 ### Google Sheets API (Optional)
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
@@ -131,7 +147,8 @@ text2story-generator/
 ├── README.md            # This file
 ├── services/            # Service modules
 │   ├── theme_analyzer.py    # OpenAI theme analysis
-│   ├── stock_media.py       # Pexels/Pixabay integration
+│   ├── stock_media.py       # Pexels integration
+│   ├── audio_service.py     # Audio integration
 │   └── sheets_manager.py    # Google Sheets management
 ├── templates/           # HTML templates
 │   └── index.html          # Main interface
@@ -206,6 +223,6 @@ If you encounter any issues:
 
 - OpenAI for GPT-3.5 API
 - Pexels for stock video API
-- Pixabay for stock media API
+- Jamendo for free music API
 - MoviePy for video processing
 - Tailwind CSS for styling 

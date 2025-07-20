@@ -12,6 +12,7 @@ from datetime import datetime
 from services.sheets_manager import SheetsManager
 from services.theme_analyzer import ThemeAnalyzer
 from services.stock_media import StockMediaService
+from services.audio_service import AudioService
 from app import create_story_video
 from config import Config
 import uuid
@@ -21,6 +22,7 @@ class BatchProcessor:
         self.sheets_manager = SheetsManager()
         self.theme_analyzer = ThemeAnalyzer()
         self.stock_media = StockMediaService()
+        self.audio_service = AudioService()
         
     def process_pending_poems(self, max_poems=10):
         """Process all pending poems from Google Sheets"""
@@ -55,7 +57,7 @@ class BatchProcessor:
                     theme_analysis.get('mood', '')
                 )
                 
-                suggested_audio = self.stock_media.get_audio_by_theme(
+                suggested_audio = self.audio_service.get_audio_by_theme(
                     theme_analysis.get('themes', []), 
                     theme_analysis.get('mood', '')
                 )

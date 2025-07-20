@@ -99,7 +99,7 @@ def get_api_keys():
     keys = {
         "OPENAI_API_KEY": "OpenAI API Key (for theme analysis)",
         "PEXELS_API_KEY": "Pexels API Key (for stock videos)",
-        "PIXABAY_API_KEY": "Pixabay API Key (for stock media)",
+        "JAMENDO_API_KEY": "Jamendo API Key (for free music)",
     }
     
     setup_now = input("Do you want to set up API keys now? (y/N): ").lower()

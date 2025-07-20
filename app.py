@@ -15,6 +15,7 @@ import moviepy_config
 # Import our services
 from services.theme_analyzer import ThemeAnalyzer
 from services.stock_media import StockMediaService
+from services.audio_service import AudioService
 from services.sheets_manager import SheetsManager
 
 app = Flask(__name__)
@@ -28,6 +29,7 @@ os.makedirs(app.config['TEMP_FOLDER'], exist_ok=True)
 # Initialize services
 theme_analyzer = ThemeAnalyzer()
 stock_media = StockMediaService()
+audio_service = AudioService()
 sheets_manager = SheetsManager()
 
 @app.route('/')
@@ -53,7 +55,7 @@ def analyze_poem():
             theme_analysis.get('mood', '')
         )
         
-        suggested_audio = stock_media.get_audio_by_theme(
+        suggested_audio = audio_service.get_audio_by_theme(
             theme_analysis.get('themes', []), 
             theme_analysis.get('mood', '')
         )
@@ -202,7 +204,7 @@ def search_media():
         if media_type == 'video':
             results = stock_media.search_videos(query, 10)
         else:
-            results = stock_media.search_audio(query, 10)
+            results = audio_service.search_audio(query, 10)
         
         return jsonify({
             'success': True,
