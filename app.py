@@ -304,6 +304,21 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         from moviepy.video.VideoClip import ImageClip
         import textwrap
         
+        # Debug: Log input parameters
+        print(f"Creating text clip: text='{text[:50]}...', size={video_width}x{video_height}, font_size={font_size}")
+        
+        # Ensure text is properly formatted
+        if not text or not text.strip():
+            print("Warning: Empty or whitespace-only text provided")
+            text = "No text provided"
+        
+        # Normalize text - ensure consistent line breaks and spacing
+        text = text.strip()
+        # Replace multiple spaces with single space
+        import re
+        text = re.sub(r'\s+', ' ', text)
+        print(f"Normalized text: '{text[:100]}...'")
+        
         # Parse color - handle hex colors like '#ffffff' or named colors like 'white'
         if text_color.startswith('#'):
             # Convert hex to RGB
@@ -339,39 +354,89 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
                 '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
                 '/System/Library/Fonts/Arial.ttf',  # macOS
                 '/System/Library/Fonts/Helvetica.ttc',  # macOS
+                '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',  # Ubuntu
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',  # Linux fallback
+                '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',  # Linux
             ]
             
             font = None
             for font_path in font_paths:
                 if os.path.exists(font_path):
-                    font = ImageFont.truetype(font_path, font_size)
-                    break
+                    try:
+                        font = ImageFont.truetype(font_path, font_size)
+                        print(f"Using font: {font_path}")
+                        break
+                    except Exception as e:
+                        print(f"Failed to load font {font_path}: {e}")
+                        continue
             
             if font is None:
-                # Use default font if no truetype font found
-                font = ImageFont.load_default()
-                print("Using default font - truetype fonts not found")
-            else:
-                print(f"Using font: {font_path}")
+                # Create a more robust fallback font
+                try:
+                    # Try to create a basic font with consistent metrics
+                    font = ImageFont.load_default()
+                    print("Using default font - truetype fonts not found")
+                    # Adjust font size for default font to maintain consistency
+                    font_size = int(font_size * 0.8)  # Scale down for default font
+                except Exception as e:
+                    print(f"Error loading default font: {e}")
+                    # Create a minimal fallback
+                    font = ImageFont.load_default()
                 
         except Exception as font_error:
             print(f"Font loading error: {font_error}")
             font = ImageFont.load_default()
         
-        # Wrap text to fit width
-        avg_char_width = font_size * 0.6  # Rough estimate
-        chars_per_line = int(text_width / avg_char_width)
-        wrapped_lines = textwrap.wrap(text, width=max(chars_per_line, 20))
+        # Wrap text to fit width - use more robust calculation
+        try:
+            # Get actual font metrics for better text wrapping
+            test_bbox = draw.textbbox((0, 0), "W", font=font)  # Use 'W' as it's typically the widest character
+            avg_char_width = test_bbox[2] - test_bbox[0]
+            chars_per_line = max(20, int(text_width / avg_char_width))
+            wrapped_lines = textwrap.wrap(text, width=chars_per_line)
+            print(f"Text wrapping: {len(wrapped_lines)} lines, {chars_per_line} chars per line")
+            
+            # Ensure we have at least some line breaks for readability
+            if len(wrapped_lines) == 1 and len(text) > 50:
+                # Force line breaks for long text
+                mid_point = len(text) // 2
+                # Find a good break point (space near middle)
+                for i in range(mid_point - 10, mid_point + 10):
+                    if i < len(text) and text[i] == ' ':
+                        mid_point = i
+                        break
+                wrapped_lines = [text[:mid_point].strip(), text[mid_point:].strip()]
+                print(f"Forced line break: {wrapped_lines}")
+                
+        except Exception as wrap_error:
+            print(f"Error in text wrapping calculation: {wrap_error}")
+            # Fallback to simple wrapping
+            avg_char_width = font_size * 0.6
+            chars_per_line = max(20, int(text_width / avg_char_width))
+            wrapped_lines = textwrap.wrap(text, width=chars_per_line)
         
-        # Calculate total text height
-        line_height = font_size + 10  # Add some line spacing
+        # Calculate total text height with better line spacing
+        try:
+            # Get actual line height from font metrics
+            test_bbox = draw.textbbox((0, 0), "Ay", font=font)  # Use 'Ay' to get proper line height
+            line_height = (test_bbox[3] - test_bbox[1]) + 10  # Add 10px spacing
+        except Exception as height_error:
+            print(f"Error calculating line height: {height_error}")
+            line_height = font_size + 10  # Fallback
+        
         total_text_height = len(wrapped_lines) * line_height
         
         # Center the text vertically
         start_y = max(0, (text_height - total_text_height) // 2)
         
+        print(f"Text layout: {len(wrapped_lines)} lines, line_height={line_height}, total_height={total_text_height}")
+        
         # Draw each line
         for i, line in enumerate(wrapped_lines):
+            # Skip empty lines
+            if not line.strip():
+                continue
+                
             # Get text bbox to center horizontally
             bbox = draw.textbbox((0, 0), line, font=font)
             text_line_width = bbox[2] - bbox[0]
@@ -387,6 +452,7 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
             
             # Draw main text
             draw.text((x, y), line, font=font, fill=(*color_rgb, 255))
+            print(f"Drew line {i+1}: '{line}' at position ({x}, {y})")
         
         # Convert PIL image to numpy array for MoviePy
         img_array = np.array(img)
@@ -396,6 +462,7 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         text_clip = text_clip.set_position('center')
         
         print(f"Created text clip with PIL: {text_width}x{text_height}, {len(wrapped_lines)} lines")
+        print(f"Text content: {wrapped_lines}")
         return text_clip
         
     except Exception as e:
