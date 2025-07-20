@@ -360,7 +360,7 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         import textwrap
         
         # Debug: Log input parameters
-        print(f"Creating text clip: text='{text[:50]}...', size={video_width}x{video_height}, font_size={font_size}")
+        print(f"Creating text clip: text='{text[:50]}...', size={video_width}x{video_height}, font_size={font_size}, color={text_color}")
         
         # Ensure text is properly formatted
         if not text or not text.strip():
@@ -403,7 +403,7 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         
         # Try to use a system font, fallback to default
         try:
-            # Try common system fonts
+            # Try common system fonts in order of preference
             font_paths = [
                 '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
                 '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
@@ -415,10 +415,12 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
             ]
             
             font = None
+            used_font_path = None
             for font_path in font_paths:
                 if os.path.exists(font_path):
                     try:
                         font = ImageFont.truetype(font_path, font_size)
+                        used_font_path = font_path
                         print(f"Using font: {font_path}")
                         break
                     except Exception as e:
@@ -430,17 +432,22 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
                 try:
                     # Try to create a basic font with consistent metrics
                     font = ImageFont.load_default()
+                    used_font_path = "default"
                     print("Using default font - truetype fonts not found")
-                    # Adjust font size for default font to maintain consistency
-                    font_size = int(font_size * 0.8)  # Scale down for default font
+                    # Keep font size consistent across environments - no scaling
                 except Exception as e:
                     print(f"Error loading default font: {e}")
                     # Create a minimal fallback
                     font = ImageFont.load_default()
+                    used_font_path = "default_fallback"
                 
         except Exception as font_error:
             print(f"Font loading error: {font_error}")
             font = ImageFont.load_default()
+            used_font_path = "default_exception"
+        
+        # Log the final font configuration for debugging
+        print(f"Final font configuration: path={used_font_path}, size={font_size}")
         
         # Wrap text to fit width - use more robust calculation
         try:
@@ -518,6 +525,7 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         
         print(f"Created text clip with PIL: {text_width}x{text_height}, {len(wrapped_lines)} lines")
         print(f"Text content: {wrapped_lines}")
+        print(f"Text clip final dimensions: {text_clip.w}x{text_clip.h}, duration: {text_clip.duration}s")
         return text_clip
         
     except Exception as e:
@@ -609,7 +617,7 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
             poem_text, 
             video_clip.w, 
             video_clip.h, 
-            min(font_size, 80), 
+            font_size, 
             text_color, 
             duration
         )
