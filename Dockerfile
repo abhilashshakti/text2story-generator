@@ -7,8 +7,12 @@ RUN apt-get update && apt-get install -y \
     fontconfig \
     fonts-dejavu \
     fonts-liberation \
-    fonts-ubuntu \
+    fonts-liberation-sans \
+    fonts-liberation-serif \
+    fonts-liberation-mono \
     fonts-roboto \
+    fonts-noto \
+    fonts-noto-sans \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
