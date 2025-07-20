@@ -17,6 +17,14 @@ A comprehensive Instagram story automation tool that transforms poems into beaut
 - **Download Management**: Easy download and organization of generated stories
 - **Modern UI**: Beautiful, responsive interface built with Tailwind CSS
 
+### Download Features
+- **Auto-Download**: Automatically download stories after generation (configurable)
+- **Download Notifications**: Prominent notifications with file size information
+- **Recent Stories**: Track and download previously generated stories
+- **User Preferences**: Save download preferences across sessions
+- **File Size Display**: See file size before downloading
+- **Multiple Download Options**: Direct download, preview, or download later
+
 ## 🛠️ Tech Stack
 
 | Component | Technology |
@@ -121,6 +129,14 @@ A comprehensive Instagram story automation tool that transforms poems into beaut
 4. **Customize**: Adjust font size, color, and duration
 5. **Generate**: Click "Generate Story" to create your Instagram story
 6. **Download**: Download the generated MP4 file
+
+### Download Workflow
+
+1. **Story Generation**: After successful generation, you'll see a download notification
+2. **Auto-Download**: If enabled, the file will automatically download to your device
+3. **Manual Download**: Click "Download Now" in the notification or use the "Recent Stories" panel
+4. **File Management**: All generated stories are listed in the "Recent Stories" section
+5. **Preferences**: Configure auto-download and notification settings in the Status & Settings panel
 
 ### Google Sheets Integration
 

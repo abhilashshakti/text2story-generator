@@ -257,17 +257,32 @@ follow your most intense obsessions mercilessly.</textarea>
                 <!-- Generation Status -->
                 <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
                     <h3 class="text-xl font-semibold text-gray-800 mb-4">
-                        <i class="fas fa-cog mr-2"></i>Status
+                        <i class="fas fa-cog mr-2"></i>Status & Settings
                     </h3>
                     
-                    <div id="status" class="text-sm text-gray-600">
+                    <div id="status" class="text-sm text-gray-600 mb-4">
                         Ready to generate stories
                     </div>
                     
-                    <div id="loading" class="loading mt-4">
+                    <div id="loading" class="loading mt-4 mb-4">
                         <div class="flex items-center space-x-2">
                             <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
                             <span>Processing...</span>
+                        </div>
+                    </div>
+
+                    <!-- Download Settings -->
+                    <div class="border-t pt-4">
+                        <h4 class="text-sm font-medium text-gray-700 mb-3">Download Settings</h4>
+                        <div class="space-y-2">
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="autoDownload" class="rounded" checked>
+                                <label for="autoDownload" class="text-sm text-gray-700">Auto-download after generation</label>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="showDownloadNotification" class="rounded" checked>
+                                <label for="showDownloadNotification" class="text-sm text-gray-700">Show download notification</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -398,6 +413,11 @@ follow your most intense obsessions mercilessly.</textarea>
         const loading = document.getElementById('loading');
         const recentStories = document.getElementById('recentStories');
 
+        // Load user preferences on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUserPreferences();
+        });
+
         // Event listeners
         fontSize.addEventListener('input', () => {
             fontSizeValue.textContent = fontSize.value;
@@ -406,6 +426,10 @@ follow your most intense obsessions mercilessly.</textarea>
         duration.addEventListener('input', () => {
             durationValue.textContent = duration.value;
         });
+
+        // Save preferences when they change
+        document.getElementById('autoDownload').addEventListener('change', saveUserPreferences);
+        document.getElementById('showDownloadNotification').addEventListener('change', saveUserPreferences);
 
         analyzeBtn.addEventListener('click', analyzePoem);
         generateBtn.addEventListener('click', generateStory);
@@ -842,15 +866,96 @@ follow your most intense obsessions mercilessly.</textarea>
 
                 if (response.data.success) {
                     showSuccess('Story generated successfully!');
-                    addToRecentStories(response.data.output_file);
-                    // Auto-download the file
-                    window.open(`/download/${response.data.output_file}`, '_blank');
+                    addToRecentStories(response.data.output_file, response.data.file_size_mb);
+                    
+                    // Check user preferences
+                    const autoDownload = document.getElementById('autoDownload').checked;
+                    const showNotification = document.getElementById('showDownloadNotification').checked;
+                    
+                    // Show download success message if enabled
+                    if (showNotification) {
+                        showDownloadSuccess(response.data.output_file, response.data.file_size_mb);
+                    }
+                    
+                    // Auto-download the file if enabled
+                    if (autoDownload) {
+                        setTimeout(() => {
+                            window.open(`/download/${response.data.output_file}`, '_blank');
+                        }, 1000);
+                    }
                 }
             } catch (error) {
                 showError('Error generating story: ' + error.response?.data?.error || error.message);
             } finally {
                 hideLoading();
             }
+        }
+
+        function showDownloadSuccess(filename, fileSizeMb) {
+            // Create a prominent download success message
+            const successMessage = document.createElement('div');
+            successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-lg z-50 max-w-sm';
+            successMessage.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas fa-check-circle mr-3 text-xl"></i>
+                        <div>
+                            <h4 class="font-semibold">Story Generated!</h4>
+                            <p class="text-sm opacity-90">Your Instagram story is ready for download</p>
+                            ${fileSizeMb ? `<p class="text-xs opacity-75 mt-1">File size: ${fileSizeMb} MB</p>` : ''}
+                        </div>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="text-white hover:text-gray-200 ml-2">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="mt-3 flex space-x-2">
+                    <button onclick="downloadStory('${filename}')" class="bg-white text-green-500 px-4 py-2 rounded-md font-semibold hover:bg-gray-100 transition duration-200 flex items-center">
+                        <i class="fas fa-download mr-2"></i>Download Now
+                    </button>
+                    <button onclick="this.parentElement.parentElement.remove()" class="bg-transparent border border-white text-white px-4 py-2 rounded-md hover:bg-white hover:text-green-500 transition duration-200">
+                        Later
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(successMessage);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (successMessage.parentElement) {
+                    successMessage.remove();
+                }
+            }, 10000);
+        }
+
+        function downloadStory(filename) {
+            // Create a temporary link and trigger download
+            const link = document.createElement('a');
+            link.href = `/download/${filename}`;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function loadUserPreferences() {
+            // Load download preferences from localStorage
+            const autoDownload = localStorage.getItem('autoDownload');
+            const showNotification = localStorage.getItem('showDownloadNotification');
+            
+            if (autoDownload !== null) {
+                document.getElementById('autoDownload').checked = autoDownload === 'true';
+            }
+            if (showNotification !== null) {
+                document.getElementById('showDownloadNotification').checked = showNotification === 'true';
+            }
+        }
+
+        function saveUserPreferences() {
+            // Save download preferences to localStorage
+            localStorage.setItem('autoDownload', document.getElementById('autoDownload').checked);
+            localStorage.setItem('showDownloadNotification', document.getElementById('showDownloadNotification').checked);
         }
 
         async function createSheet() {
@@ -916,22 +1021,49 @@ follow your most intense obsessions mercilessly.</textarea>
             document.getElementById('poemsModal').classList.add('hidden');
         }
 
-        function addToRecentStories(filename) {
+        function addToRecentStories(filename, fileSizeMb) {
             const stories = recentStories.querySelectorAll('.story-item');
             if (stories.length >= 5) {
                 stories[stories.length - 1].remove();
             }
 
+            // Remove the "No stories generated yet" message if it exists
+            const noStoriesMessage = recentStories.querySelector('p');
+            if (noStoriesMessage && noStoriesMessage.textContent.includes('No stories generated yet')) {
+                noStoriesMessage.remove();
+            }
+
             const storyItem = document.createElement('div');
-            storyItem.className = 'story-item flex justify-between items-center p-2 bg-gray-50 rounded';
+            storyItem.className = 'story-item flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition duration-200';
             storyItem.innerHTML = `
-                <span class="text-sm text-gray-700">${filename}</span>
-                <a href="/download/${filename}" class="text-blue-500 hover:text-blue-700 text-sm">
-                    <i class="fas fa-download"></i>
-                </a>
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-video text-green-600 text-sm"></i>
+                    </div>
+                    <div>
+                        <span class="text-sm font-medium text-gray-700">${filename}</span>
+                        <p class="text-xs text-gray-500">
+                            Just generated
+                            ${fileSizeMb ? ` • ${fileSizeMb} MB` : ''}
+                        </p>
+                    </div>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="downloadStory('${filename}')" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition duration-200 flex items-center">
+                        <i class="fas fa-download mr-1"></i>Download
+                    </button>
+                    <button onclick="previewStory('${filename}')" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs transition duration-200">
+                        <i class="fas fa-play"></i>
+                    </button>
+                </div>
             `;
 
             recentStories.insertBefore(storyItem, recentStories.firstChild);
+        }
+
+        function previewStory(filename) {
+            // Open the video in a new tab for preview
+            window.open(`/download/${filename}`, '_blank');
         }
 
         function showLoading(message) {

@@ -112,9 +112,15 @@ def generate_story():
                 except Exception as e:
                     print(f"Error saving to sheets: {e}")
             
+            # Get file size for user feedback
+            file_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+            file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+            file_size_mb = round(file_size / (1024 * 1024), 1)
+            
             return jsonify({
                 'success': True,
                 'output_file': output_filename,
+                'file_size_mb': file_size_mb,
                 'message': 'Story generated successfully!'
             })
         else:
@@ -127,11 +133,23 @@ def generate_story():
 def download_file(filename):
     """Download generated story file"""
     try:
+        file_path = os.path.join(app.config['OUTPUT_FOLDER'], filename)
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+        
+        # Get file size for logging
+        file_size = os.path.getsize(file_path)
+        print(f"Downloading file: {filename} ({file_size} bytes)")
+        
         return send_file(
-            os.path.join(app.config['OUTPUT_FOLDER'], filename),
-            as_attachment=True
+            file_path,
+            as_attachment=True,
+            download_name=filename
         )
     except Exception as e:
+        print(f"Error downloading file {filename}: {e}")
         return jsonify({'error': str(e)}), 404
 
 @app.route('/proxy-media')
