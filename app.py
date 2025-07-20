@@ -196,6 +196,73 @@ def download_file(filename):
         print(f"Error downloading file {filename}: {e}")
         return jsonify({'error': str(e)}), 404
 
+@app.route('/test-text-rendering')
+def test_text_rendering():
+    """Test endpoint to verify text rendering works in production"""
+    try:
+        # Test both MoviePy and PIL text rendering
+        test_text = "Test overlay quality"
+        video_width, video_height = 1080, 1920
+        font_size = 60
+        text_color = "#FFFFFF"
+        duration = 5
+        
+        print("🧪 Testing text rendering capabilities...")
+        
+        # Test MoviePy TextClip
+        moviepy_success = False
+        try:
+            text_clip = create_text_clip_with_moviepy(test_text, video_width, video_height, font_size, text_color, duration)
+            if text_clip:
+                moviepy_success = True
+                text_clip.close()  # Clean up
+        except Exception as e:
+            print(f"MoviePy test failed: {e}")
+        
+        # Test enhanced PIL
+        pil_success = False
+        try:
+            text_clip = create_enhanced_pil_text_clip(test_text, video_width, video_height, font_size, text_color, duration)
+            if text_clip:
+                pil_success = True
+                text_clip.close()  # Clean up
+        except Exception as e:
+            print(f"Enhanced PIL test failed: {e}")
+        
+        # Check ImageMagick availability
+        imagemagick_available = False
+        try:
+            import shutil
+            magick_binary = shutil.which('magick') or shutil.which('convert')
+            imagemagick_available = magick_binary is not None
+        except:
+            pass
+        
+        # Check available fonts
+        available_fonts = []
+        font_paths = [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            '/System/Library/Fonts/Arial.ttf',
+            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
+        ]
+        for font_path in font_paths:
+            if os.path.exists(font_path):
+                available_fonts.append(font_path)
+        
+        return jsonify({
+            'status': 'success',
+            'moviepy_rendering': moviepy_success,
+            'enhanced_pil_rendering': pil_success,
+            'imagemagick_available': imagemagick_available,
+            'available_fonts': available_fonts,
+            'environment': 'production' if os.environ.get('PORT') else 'development',
+            'platform': os.name
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
 @app.route('/proxy-media')
 def proxy_media():
     """Proxy media URLs to handle CORS and authentication issues"""
@@ -543,6 +610,192 @@ def create_text_clip_with_pil(text, video_width, video_height, font_size, text_c
         print("Created fallback colored rectangle")
         return fallback_clip
 
+def create_text_clip_with_moviepy(text, video_width, video_height, font_size, text_color, duration):
+    """Create a high-quality text clip using MoviePy's TextClip with ImageMagick"""
+    try:
+        import textwrap
+        print(f"Attempting MoviePy TextClip: text='{text[:50]}...', size={video_width}x{video_height}, font_size={font_size}, color={text_color}")
+        
+        # Ensure text is properly formatted
+        if not text or not text.strip():
+            print("Warning: Empty or whitespace-only text provided")
+            text = "No text provided"
+        
+        # Normalize text
+        text = text.strip()
+        import re
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Calculate optimal text width for wrapping
+        text_width_chars = int((video_width * 0.8) / (font_size * 0.6))
+        wrapped_lines = textwrap.wrap(text, width=max(20, text_width_chars))
+        formatted_text = '\n'.join(wrapped_lines)
+        
+        # Railway-compatible font options (use font files instead of names)
+        font_options = [
+            # Try font file paths first (more reliable on Linux)
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
+            # Fallback to font names if files not found
+            'DejaVu-Sans-Bold',
+            'Liberation-Sans-Bold',
+            'Ubuntu-Bold',
+            'Arial-Bold',
+            'Helvetica-Bold'
+        ]
+        
+        # Try each font option
+        text_clip = None
+        for font_option in font_options:
+            try:
+                # Different approach for file paths vs font names
+                if font_option.startswith('/') and os.path.exists(font_option):
+                    print(f"Trying font file: {font_option}")
+                    # Use font file directly
+                    text_clip = TextClip(
+                        formatted_text,
+                        fontsize=font_size,
+                        color=text_color,
+                        font=font_option,
+                        stroke_color='black',
+                        stroke_width=2
+                    ).set_duration(duration).set_position('center')
+                else:
+                    print(f"Trying font name: {font_option}")
+                    # Use font name with method specification
+                    text_clip = TextClip(
+                        formatted_text,
+                        fontsize=font_size,
+                        color=text_color,
+                        font=font_option,
+                        stroke_color='black',
+                        stroke_width=2,
+                        method='caption' if len(formatted_text) > 50 else 'label'
+                    ).set_duration(duration).set_position('center')
+                
+                print(f"✅ Successfully created TextClip with: {font_option}")
+                return text_clip
+                
+            except Exception as e:
+                print(f"❌ Failed with {font_option}: {str(e)[:100]}...")
+                continue
+        
+        # If all MoviePy options failed, fallback to enhanced PIL
+        print("⚠️ All MoviePy font options failed, using enhanced PIL rendering")
+        return create_enhanced_pil_text_clip(text, video_width, video_height, font_size, text_color, duration)
+        
+    except Exception as e:
+        print(f"❌ Error in MoviePy text creation: {e}")
+        import traceback
+        traceback.print_exc()
+        # Fallback to enhanced PIL
+        return create_enhanced_pil_text_clip(text, video_width, video_height, font_size, text_color, duration)
+
+def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, text_color, duration):
+    """Enhanced PIL text rendering with better quality settings"""
+    try:
+        from moviepy.video.VideoClip import ImageClip
+        import textwrap
+        
+        print(f"Creating enhanced PIL text clip for better quality")
+        
+        # Render at 2x resolution for better quality
+        scale_factor = 2
+        text_width = int(video_width * 0.9 * scale_factor)
+        text_height = int(video_height * 0.8 * scale_factor)
+        scaled_font_size = font_size * scale_factor
+        
+        # Create high-resolution image
+        img = Image.new('RGBA', (text_width, text_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Parse color
+        if text_color.startswith('#'):
+            text_color = text_color.lstrip('#')
+            color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
+        else:
+            color_map = {
+                'white': (255, 255, 255), 'black': (0, 0, 0), 'red': (255, 0, 0),
+                'green': (0, 255, 0), 'blue': (0, 0, 255), 'yellow': (255, 255, 0),
+                'cyan': (0, 255, 255), 'magenta': (255, 0, 255)
+            }
+            color_rgb = color_map.get(text_color.lower(), (255, 255, 255))
+        
+        # Enhanced font loading with better quality fonts
+        font = None
+        font_paths = [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            '/System/Library/Fonts/Arial.ttf',  # macOS
+            '/System/Library/Fonts/Helvetica.ttc',  # macOS
+            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
+        ]
+        
+        for font_path in font_paths:
+            if os.path.exists(font_path):
+                try:
+                    font = ImageFont.truetype(font_path, scaled_font_size)
+                    print(f"Using enhanced font: {font_path} at size {scaled_font_size}")
+                    break
+                except Exception as e:
+                    continue
+        
+        if font is None:
+            font = ImageFont.load_default()
+            print("Using default font for enhanced rendering")
+        
+        # Text wrapping with better calculations
+        avg_char_width = scaled_font_size * 0.6
+        chars_per_line = max(20, int(text_width / avg_char_width))
+        wrapped_lines = textwrap.wrap(text, width=chars_per_line)
+        
+        # Calculate layout
+        line_height = int(scaled_font_size * 1.2)  # Better line spacing
+        total_text_height = len(wrapped_lines) * line_height
+        start_y = max(0, (text_height - total_text_height) // 2)
+        
+        # Draw text with better outline quality
+        for i, line in enumerate(wrapped_lines):
+            if not line.strip():
+                continue
+            
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_line_width = bbox[2] - bbox[0]
+            x = max(0, (text_width - text_line_width) // 2)
+            y = start_y + (i * line_height)
+            
+            # Better outline using multiple passes
+            outline_width = 3 * scale_factor
+            for offset in range(1, outline_width + 1):
+                for dx in [-offset, 0, offset]:
+                    for dy in [-offset, 0, offset]:
+                        if dx != 0 or dy != 0:
+                            draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, int(180 * (outline_width - offset + 1) / outline_width)))
+            
+            # Main text
+            draw.text((x, y), line, font=font, fill=(*color_rgb, 255))
+        
+        # Resize back to original resolution with high-quality resampling
+        img = img.resize((int(video_width * 0.9), int(video_height * 0.8)), Image.LANCZOS)
+        
+        # Convert to numpy array
+        img_array = np.array(img)
+        
+        # Create ImageClip
+        text_clip = ImageClip(img_array, transparent=True, duration=duration)
+        text_clip = text_clip.set_position('center')
+        
+        print(f"Created enhanced PIL text clip: {img.width}x{img.height}")
+        return text_clip
+        
+    except Exception as e:
+        print(f"Error creating enhanced PIL text: {e}")
+        import traceback
+        traceback.print_exc()
+        # Ultimate fallback
+        return create_text_clip_with_pil(text, video_width, video_height, font_size, text_color, duration)
+
 def create_story_video(poem_text, video_url, audio_url, font_size, text_color, duration, output_path):
     """Create Instagram story video with poem overlay"""
     temp_video_path = None  # Track temporary video file for cleanup
@@ -617,8 +870,8 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         effective_font_size = max(font_size, min_font_size)
         print(f"Font size: requested={font_size}, effective={effective_font_size}")
         
-        # Create text using PIL (completely bypasses MoviePy's text rendering)
-        text_clip = create_text_clip_with_pil(
+        # Create text using high-quality rendering (MoviePy with ImageMagick fallback to enhanced PIL)
+        text_clip = create_text_clip_with_moviepy(
             poem_text, 
             video_clip.w, 
             video_clip.h, 
