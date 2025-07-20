@@ -1032,7 +1032,7 @@ def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, te
         return create_text_clip_with_pil(text, video_width, video_height, font_size, text_color, duration)
 
 def create_simple_visible_text_clip(text, video_width, video_height, font_size, text_color, duration):
-    """Create a simple, guaranteed-visible text clip using PIL with default font"""
+    """Create a simple, guaranteed-visible text clip using PIL with proper fonts"""
     try:
         from moviepy.video.VideoClip import ImageClip
         import textwrap
@@ -1062,9 +1062,33 @@ def create_simple_visible_text_clip(text, video_width, video_height, font_size, 
         else:
             color_rgb = (255, 255, 255)  # Default to white
         
-        # Use default font but make it larger for visibility
-        font = ImageFont.load_default()
-        effective_font_size = max(font_size * 3, 80)  # Make it much larger
+        # Try to load proper fonts that will be available in Docker
+        font = None
+        font_paths = [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
+            '/usr/share/fonts/truetype/roboto/Roboto-Bold.ttf',
+            '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/TTF/LiberationSans-Bold.ttf'
+        ]
+        
+        effective_font_size = max(font_size * 2, 60)  # Reasonable size
+        
+        for font_path in font_paths:
+            if os.path.exists(font_path):
+                try:
+                    font = ImageFont.truetype(font_path, effective_font_size)
+                    print(f"✅ Using proper font: {os.path.basename(font_path)}")
+                    break
+                except Exception as e:
+                    print(f"❌ Failed to load {font_path}: {e}")
+                    continue
+        
+        if font is None:
+            print("⚠️ No proper fonts found, using default font")
+            font = ImageFont.load_default()
+            effective_font_size = max(font_size * 3, 80)  # Make default font larger
         
         # Simple text wrapping
         avg_char_width = effective_font_size * 0.6
