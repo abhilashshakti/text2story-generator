@@ -4,12 +4,24 @@ import json
 
 class ThemeAnalyzer:
     def __init__(self):
-        self.client = openai.OpenAI(api_key=Config.OPENAI_API_KEY)
+        try:
+            if Config.OPENAI_API_KEY:
+                self.client = openai.OpenAI(api_key=Config.OPENAI_API_KEY)
+            else:
+                self.client = None
+                print("Warning: OpenAI API key not found. Theme analysis will use fallback methods.")
+        except Exception as e:
+            print(f"Error initializing OpenAI client: {e}")
+            self.client = None
     
     def analyze_poem_theme(self, poem_text):
         """
         Analyze a poem to extract themes, mood, and suggest appropriate visual/audio elements
         """
+        # If OpenAI client is not available, use fallback analysis
+        if not self.client:
+            return self._get_fallback_analysis(poem_text)
+        
         try:
             prompt = f"""
             Analyze the following poem and provide:
@@ -93,6 +105,59 @@ class ThemeAnalyzer:
             "mood": "contemplative",
             "visual_keywords": ["abstract", "nature", "light"],
             "audio_suggestions": ["ambient", "piano", "soft"],
+            "color_palette": "neutral tones"
+        }
+    
+    def _get_fallback_analysis(self, poem_text):
+        """Return fallback analysis when OpenAI is not available"""
+        text_lower = poem_text.lower()
+        
+        # Simple keyword-based analysis
+        themes = []
+        mood = "contemplative"
+        
+        # Theme detection
+        if any(word in text_lower for word in ["love", "heart", "romance", "passion"]):
+            themes.append("love")
+        if any(word in text_lower for word in ["nature", "tree", "flower", "ocean", "mountain"]):
+            themes.append("nature")
+        if any(word in text_lower for word in ["sad", "sorrow", "grief", "tears"]):
+            themes.append("sadness")
+        if any(word in text_lower for word in ["joy", "happy", "smile", "laugh"]):
+            themes.append("joy")
+        if any(word in text_lower for word in ["hope", "dream", "future"]):
+            themes.append("hope")
+        
+        if not themes:
+            themes = ["poetry", "reflection"]
+        
+        # Mood detection
+        if any(word in text_lower for word in ["sad", "sorrow", "grief", "melancholy"]):
+            mood = "melancholic"
+        elif any(word in text_lower for word in ["joy", "happy", "bright", "cheerful"]):
+            mood = "uplifting"
+        elif any(word in text_lower for word in ["calm", "peace", "tranquil", "serene"]):
+            mood = "peaceful"
+        elif any(word in text_lower for word in ["passion", "intense", "dramatic"]):
+            mood = "dramatic"
+        
+        # Generate visual keywords based on themes
+        visual_keywords = self.suggest_video_keywords(themes, mood)
+        
+        # Audio suggestions based on mood
+        audio_suggestions = {
+            "melancholic": ["piano", "ambient", "soft"],
+            "uplifting": ["upbeat", "energetic", "bright"],
+            "peaceful": ["calm", "ambient", "gentle"],
+            "dramatic": ["intense", "orchestral", "emotional"],
+            "contemplative": ["ambient", "piano", "soft"]
+        }.get(mood, ["ambient", "piano", "soft"])
+        
+        return {
+            "themes": themes,
+            "mood": mood,
+            "visual_keywords": visual_keywords,
+            "audio_suggestions": audio_suggestions,
             "color_palette": "neutral tones"
         }
     
