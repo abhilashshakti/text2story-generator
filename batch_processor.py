@@ -68,7 +68,7 @@ class BatchProcessor:
                 
                 # Generate story
                 output_filename = f"batch_story_{uuid.uuid4().hex[:8]}.mp4"
-                output_path = os.path.join(Config.OUTPUT_FOLDER, output_filename)
+                output_path = os.path.join(Config.TEMP_FOLDER, output_filename)
                 
                 success = create_story_video(
                     poem['Poem Text'],

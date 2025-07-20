@@ -24,7 +24,6 @@ app.config.from_object(Config)
 
 # Create directories if they don't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 os.makedirs(app.config['TEMP_FOLDER'], exist_ok=True)
 
 # Initialize services
@@ -33,8 +32,32 @@ stock_media = StockMediaService()
 audio_service = AudioService()
 sheets_manager = SheetsManager()
 
+# Clean up old temporary files on startup
+def cleanup_old_temp_files():
+    """Clean up temporary files older than 1 hour"""
+    try:
+        temp_dir = app.config['TEMP_FOLDER']
+        current_time = time.time()
+        for filename in os.listdir(temp_dir):
+            file_path = os.path.join(temp_dir, filename)
+            if os.path.isfile(file_path):
+                # Remove files older than 1 hour
+                if current_time - os.path.getmtime(file_path) > 3600:
+                    try:
+                        os.unlink(file_path)
+                        print(f"Cleaned up old temp file: {filename}")
+                    except Exception as e:
+                        print(f"Could not clean up {filename}: {e}")
+    except Exception as e:
+        print(f"Error during temp file cleanup: {e}")
+
+# Import time module for cleanup
+import time
+
 @app.route('/')
 def index():
+    # Clean up old temp files on each request to homepage
+    cleanup_old_temp_files()
     return render_template('index.html')
 
 @app.route('/analyze-poem', methods=['POST'])
@@ -87,9 +110,9 @@ def generate_story():
         if not poem_text:
             return jsonify({'error': 'Poem text is required'}), 400
         
-        # Generate unique filename
+        # Generate unique filename and use temp directory
         output_filename = f"story_{uuid.uuid4().hex[:8]}.mp4"
-        output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+        output_path = os.path.join(app.config['TEMP_FOLDER'], output_filename)
         
         # Create the story video
         success = create_story_video(
@@ -114,7 +137,7 @@ def generate_story():
                     print(f"Error saving to sheets: {e}")
             
             # Get file size for user feedback
-            file_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+            file_path = os.path.join(app.config['TEMP_FOLDER'], output_filename)
             file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
             file_size_mb = round(file_size / (1024 * 1024), 1)
             
@@ -132,9 +155,9 @@ def generate_story():
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    """Download generated story file"""
+    """Download generated story file and clean up after download"""
     try:
-        file_path = os.path.join(app.config['OUTPUT_FOLDER'], filename)
+        file_path = os.path.join(app.config['TEMP_FOLDER'], filename)
         
         # Check if file exists
         if not os.path.exists(file_path):
@@ -144,10 +167,30 @@ def download_file(filename):
         file_size = os.path.getsize(file_path)
         print(f"Downloading file: {filename} ({file_size} bytes)")
         
-        return send_file(
-            file_path,
-            as_attachment=True,
-            download_name=filename
+        # Create a response that will clean up the file after sending
+        def generate_and_cleanup():
+            try:
+                with open(file_path, 'rb') as f:
+                    while True:
+                        chunk = f.read(8192)
+                        if not chunk:
+                            break
+                        yield chunk
+            finally:
+                # Clean up the file after sending
+                try:
+                    os.unlink(file_path)
+                    print(f"Cleaned up temporary file: {filename}")
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not clean up {filename}: {cleanup_error}")
+        
+        return Response(
+            generate_and_cleanup(),
+            content_type='video/mp4',
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"',
+                'Content-Length': str(file_size)
+            }
         )
     except Exception as e:
         print(f"Error downloading file {filename}: {e}")
@@ -208,6 +251,18 @@ def proxy_media():
 def test_proxy():
     """Test endpoint to check if proxy is working"""
     return jsonify({'status': 'Proxy endpoint is working'})
+
+@app.route('/cleanup-temp', methods=['POST'])
+def cleanup_temp_files():
+    """Manually clean up temporary files"""
+    try:
+        cleanup_old_temp_files()
+        return jsonify({
+            'success': True,
+            'message': 'Temporary files cleaned up successfully'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/search-media', methods=['POST'])
 def search_media():

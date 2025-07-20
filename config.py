@@ -25,7 +25,6 @@ class Config:
     
     # File paths
     UPLOAD_FOLDER = 'uploads'
-    OUTPUT_FOLDER = 'outputs'
     TEMP_FOLDER = 'temp'
     
     # Video settings
