@@ -4,4 +4,6 @@ Pillow>=10.0.0
 requests==2.31.0
 python-dotenv==1.0.0
 openai==1.3.0
-pexels-api==1.0.1 
+pexels-api==1.0.1
+gunicorn==21.2.0
+imageio-ffmpeg==0.4.9 
