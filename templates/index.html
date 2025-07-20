@@ -194,19 +194,31 @@ follow your most intense obsessions mercilessly.</textarea>
                     <!-- Custom Media Search -->
                     <div class="border-t pt-4">
                         <h4 class="text-lg font-medium text-gray-700 mb-3">Search Custom Media</h4>
-                        <div class="flex space-x-2">
-                            <input 
-                                type="text" 
-                                id="mediaSearch" 
-                                placeholder="Search for videos or audio..."
-                                class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
+                        <div class="flex space-x-2 mb-3">
+                            <div class="flex-1">
+                                <input 
+                                    type="text" 
+                                    id="mediaSearch" 
+                                    placeholder="Search for videos or audio..."
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                            </div>
                             <button 
                                 id="searchMediaBtn"
                                 class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md transition duration-200"
                             >
                                 <i class="fas fa-search"></i>
                             </button>
+                        </div>
+                        <div class="flex space-x-4 mb-3">
+                            <label class="flex items-center space-x-2">
+                                <input type="radio" name="mediaType" value="video" checked class="text-purple-500">
+                                <span class="text-sm text-gray-700">Videos</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="radio" name="mediaType" value="audio" class="text-purple-500">
+                                <span class="text-sm text-gray-700">Audio</span>
+                            </label>
                         </div>
                         <div id="searchResults" class="mt-4"></div>
                     </div>
@@ -690,17 +702,35 @@ follow your most intense obsessions mercilessly.</textarea>
         }
 
         function selectVideoFromPreview() {
-            const videoId = document.getElementById('videoPreview').dataset.videoId;
+            const videoPreview = document.getElementById('videoPreview');
+            const videoId = videoPreview.dataset.videoId;
+            const searchUrl = videoPreview.dataset.searchUrl;
+            
             if (videoId) {
+                // Regular video selection
                 selectVideo(videoId);
+                closeVideoModal();
+            } else if (searchUrl) {
+                // Search result selection
+                const searchTitle = videoPreview.dataset.searchTitle || 'Untitled';
+                selectSearchResult(searchUrl, searchTitle, 'video');
                 closeVideoModal();
             }
         }
 
         function selectAudioFromPreview() {
-            const audioId = document.getElementById('audioPreview').dataset.audioId;
+            const audioPreview = document.getElementById('audioPreview');
+            const audioId = audioPreview.dataset.audioId;
+            const searchUrl = audioPreview.dataset.searchUrl;
+            
             if (audioId) {
+                // Regular audio selection
                 selectAudio(audioId);
+                closeAudioModal();
+            } else if (searchUrl) {
+                // Search result selection
+                const searchTitle = audioPreview.dataset.searchTitle || 'Untitled';
+                selectSearchResult(searchUrl, searchTitle, 'audio');
                 closeAudioModal();
             }
         }
@@ -712,6 +742,11 @@ follow your most intense obsessions mercilessly.</textarea>
             // Clean up video
             videoPreview.pause();
             videoPreview.src = '';
+            
+            // Clean up search result data
+            delete videoPreview.dataset.searchUrl;
+            delete videoPreview.dataset.searchTitle;
+            delete videoPreview.dataset.searchType;
             
             // Remove any fallback messages
             const fallbackDivs = videoContainer.querySelectorAll('.absolute');
@@ -727,6 +762,11 @@ follow your most intense obsessions mercilessly.</textarea>
             // Clean up audio
             audioPreview.pause();
             audioPreview.src = '';
+            
+            // Clean up search result data
+            delete audioPreview.dataset.searchUrl;
+            delete audioPreview.dataset.searchTitle;
+            delete audioPreview.dataset.searchType;
             
             // Remove any fallback messages
             const fallbackDivs = audioContainer.querySelectorAll('.absolute');
@@ -754,17 +794,20 @@ follow your most intense obsessions mercilessly.</textarea>
                 return;
             }
 
-            showLoading('Searching for media...');
+            // Get selected media type
+            const mediaType = document.querySelector('input[name="mediaType"]:checked').value;
+
+            showLoading(`Searching for ${mediaType}...`);
             
             try {
                 const response = await axios.post('/search-media', {
                     query: query,
-                    type: 'video'  // Default to video search
+                    type: mediaType
                 });
 
                 if (response.data.success) {
-                    displaySearchResults(response.data.results, query);
-                    showSuccess('Search completed!');
+                    displaySearchResults(response.data.results, query, mediaType);
+                    showSuccess(`${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} search completed!`);
                 }
             } catch (error) {
                 showError('Error searching media: ' + error.response?.data?.error || error.message);
@@ -773,33 +816,36 @@ follow your most intense obsessions mercilessly.</textarea>
             }
         }
 
-        function displaySearchResults(results, query) {
+        function displaySearchResults(results, query, mediaType) {
             const searchResults = document.getElementById('searchResults');
             
             if (results.length === 0) {
-                searchResults.innerHTML = '<p class="text-gray-500">No results found for "' + query + '"</p>';
+                searchResults.innerHTML = '<p class="text-gray-500">No ' + mediaType + ' found for "' + query + '"</p>';
                 return;
             }
 
+            const mediaIcon = mediaType === 'video' ? 'fa-video' : 'fa-music';
+            const mediaLabel = mediaType === 'video' ? 'Video' : 'Audio';
+
             searchResults.innerHTML = `
-                <h5 class="font-medium text-gray-700 mb-3">Search Results for "${query}"</h5>
+                <h5 class="font-medium text-gray-700 mb-3">${mediaLabel} Search Results for "${query}"</h5>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     ${results.map(item => `
                         <div class="border rounded-lg p-3 hover:bg-gray-50 transition-all duration-200">
                             <div class="flex items-center space-x-3">
                                 <div class="w-16 h-12 bg-gray-200 rounded flex items-center justify-center">
-                                    <i class="fas fa-video text-gray-500"></i>
+                                    <i class="fas ${mediaIcon} text-gray-500"></i>
                                 </div>
                                 <div class="flex-1">
                                     <h5 class="font-medium text-sm">${item.title || 'Untitled'}</h5>
                                     <p class="text-xs text-gray-500">${item.duration || 'Unknown'}s • ${item.source || 'Unknown'}</p>
                                 </div>
                                 <div class="flex space-x-2">
-                                    <button onclick="previewSearchResult('${item.url}')" 
+                                    <button onclick="previewSearchResult('${item.url}', '${mediaType}', '${item.title || 'Untitled'}')" 
                                             class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs transition duration-200">
                                         <i class="fas fa-play mr-1"></i>Preview
                                     </button>
-                                    <button onclick="selectSearchResult('${item.url}', '${item.title || 'Untitled'}')" 
+                                    <button onclick="selectSearchResult('${item.url}', '${item.title || 'Untitled'}', '${mediaType}')" 
                                             class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition duration-200">
                                         <i class="fas fa-check mr-1"></i>Select
                                     </button>
@@ -811,19 +857,53 @@ follow your most intense obsessions mercilessly.</textarea>
             `;
         }
 
-        function previewSearchResult(url) {
-            // Open the video URL in a new tab for preview
-            window.open(url, '_blank');
+        function previewSearchResult(url, mediaType, title = 'Untitled') {
+            // Use the existing preview modals instead of opening in new tab
+            if (mediaType === 'video') {
+                // Use the video preview modal
+                const videoPreview = document.getElementById('videoPreview');
+                const videoPreviewTitle = document.getElementById('videoPreviewTitle');
+                const videoPreviewInfo = document.getElementById('videoPreviewInfo');
+                
+                videoPreview.src = url;
+                videoPreviewTitle.textContent = title;
+                videoPreviewInfo.textContent = 'Preview from search results';
+                
+                // Store search result data for selection
+                videoPreview.dataset.searchUrl = url;
+                videoPreview.dataset.searchTitle = title;
+                videoPreview.dataset.searchType = 'video';
+                
+                // Show the modal
+                document.getElementById('videoPreviewModal').classList.remove('hidden');
+            } else if (mediaType === 'audio') {
+                // Use the audio preview modal
+                const audioPreview = document.getElementById('audioPreview');
+                const audioPreviewTitle = document.getElementById('audioPreviewTitle');
+                const audioPreviewInfo = document.getElementById('audioPreviewInfo');
+                
+                audioPreview.src = url;
+                audioPreviewTitle.textContent = title;
+                audioPreviewInfo.textContent = 'Preview from search results';
+                
+                // Store search result data for selection
+                audioPreview.dataset.searchUrl = url;
+                audioPreview.dataset.searchTitle = title;
+                audioPreview.dataset.searchType = 'audio';
+                
+                // Show the modal
+                document.getElementById('audioPreviewModal').classList.remove('hidden');
+            }
         }
 
-        function selectSearchResult(url, title) {
+        function selectSearchResult(url, title, mediaType) {
             // Add the search result to the current analysis for selection
             if (!currentAnalysis) {
                 alert('Please analyze a poem first');
                 return;
             }
 
-            const newVideo = {
+            const newItem = {
                 id: 'search_' + Date.now(),
                 title: title,
                 url: url,
@@ -831,17 +911,21 @@ follow your most intense obsessions mercilessly.</textarea>
                 source: 'Search Result'
             };
 
-            // Add to suggested videos
-            currentAnalysis.suggested_videos.push(newVideo);
-            
-            // Select this video
-            selectVideo(newVideo.id);
+            if (mediaType === 'video') {
+                // Add to suggested videos
+                currentAnalysis.suggested_videos.push(newItem);
+                selectVideo(newItem.id);
+                showSuccess('Video selected from search results!');
+            } else if (mediaType === 'audio') {
+                // Add to suggested audio
+                currentAnalysis.suggested_audio.push(newItem);
+                selectAudio(newItem.id);
+                showSuccess('Audio selected from search results!');
+            }
             
             // Clear search results
             document.getElementById('searchResults').innerHTML = '';
             document.getElementById('mediaSearch').value = '';
-            
-            showSuccess('Video selected from search results!');
         }
 
         async function generateStory() {
