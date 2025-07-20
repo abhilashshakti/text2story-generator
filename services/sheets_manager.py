@@ -4,6 +4,7 @@ from config import Config
 import json
 from typing import List, Dict, Optional
 from datetime import datetime
+import os
 
 class SheetsManager:
     def __init__(self):
@@ -22,15 +23,26 @@ class SheetsManager:
                 # Load credentials from environment variable
                 creds_dict = json.loads(Config.GOOGLE_SHEETS_CREDENTIALS)
                 self.creds = Credentials.from_service_account_info(creds_dict, scopes=self.scope)
-            else:
+                print("Google Sheets credentials loaded from environment variable")
+            elif os.path.exists('service-account.json'):
                 # Try to load from service account file
                 self.creds = Credentials.from_service_account_file(
                     'service-account.json', scopes=self.scope
                 )
+                print("Google Sheets credentials loaded from service-account.json")
+            else:
+                print("Warning: No Google Sheets credentials found. Sheets functionality will be disabled.")
+                print("To enable Google Sheets, either:")
+                print("1. Set GOOGLE_SHEETS_CREDENTIALS environment variable with service account JSON")
+                print("2. Add service-account.json file to the project root")
+                self.client = None
+                return
             
             self.client = gspread.authorize(self.creds)
+            print("Google Sheets client initialized successfully")
         except Exception as e:
             print(f"Error setting up Google Sheets credentials: {e}")
+            print("Google Sheets functionality will be disabled")
             self.client = None
     
     def create_poem_sheet(self, sheet_name: str = "Poem Stories") -> Optional[str]:
