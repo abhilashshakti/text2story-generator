@@ -299,26 +299,54 @@ def search_poems():
 
 def create_story_video(poem_text, video_url, audio_url, font_size, text_color, duration, output_path):
     """Create Instagram story video with poem overlay"""
+    temp_video_path = None  # Track temporary video file for cleanup
     try:
         print(f"Creating video with: poem='{poem_text[:50]}...', video_url='{video_url}', duration={duration}")
         
         # Download video if URL provided, otherwise use default
         if video_url and video_url.strip():
             try:
-                # For remote URLs, try to download first or use proxy
+                # For remote URLs, download to temp file first
                 if video_url.startswith('http'):
-                    # Use a simple colored background for remote videos to avoid issues
-                    from moviepy.video.VideoClip import ColorClip
-                    video_clip = ColorClip(size=(1080, 1920), color=(0, 0, 0), duration=duration)
-                    print(f"Using fallback background for remote video: {video_url}")
+                    print(f"Downloading remote video: {video_url}")
+                    
+                    # Download video to temporary file
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    }
+                    
+                    # Add specific headers for different sources
+                    if 'pexels.com' in video_url:
+                        headers['Authorization'] = Config.PEXELS_API_KEY
+                    
+                    response = requests.get(video_url, headers=headers, stream=True, timeout=30)
+                    response.raise_for_status()
+                    
+                    # Create temporary file for video
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            temp_video.write(chunk)
+                        temp_video_path = temp_video.name
+                    
+                    # Load video from temporary file
+                    video_clip = VideoFileClip(temp_video_path)
+                    print(f"Downloaded and loaded remote video: {video_clip.w}x{video_clip.h}, duration: {video_clip.duration}s")
+                    print(f"Video file size: {os.path.getsize(temp_video_path)} bytes")
+                    
+                    # Clean up temp file after loading (VideoFileClip keeps file handle)
+                    # We'll clean it up after video processing is done
+                    
                 else:
                     video_clip = VideoFileClip(video_url)
                     print(f"Loaded local video: {video_clip.w}x{video_clip.h}, duration: {video_clip.duration}s")
             except Exception as e:
                 print(f"Error loading video from {video_url}: {e}")
+                import traceback
+                traceback.print_exc()
                 # Create a simple colored background as fallback
                 from moviepy.video.VideoClip import ColorClip
                 video_clip = ColorClip(size=(1080, 1920), color=(0, 0, 0), duration=duration)
+                print("Using fallback background due to video loading error")
         else:
             # Create a simple colored background - Instagram story format
             from moviepy.video.VideoClip import ColorClip
@@ -330,10 +358,13 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
             video_clip = video_clip.subclip(0, duration)
         
         # Ensure video has valid dimensions
-        if video_clip.w <= 0 or video_clip.h <= 0:
-            print("Invalid video dimensions, creating fallback")
+        print(f"Video dimensions check: {video_clip.w}x{video_clip.h}")
+        if not (hasattr(video_clip, 'w') and hasattr(video_clip, 'h') and video_clip.w > 0 and video_clip.h > 0):
+            print(f"Invalid video dimensions detected: w={getattr(video_clip, 'w', 'N/A')}, h={getattr(video_clip, 'h', 'N/A')}, creating fallback")
             from moviepy.video.VideoClip import ColorClip
             video_clip = ColorClip(size=(1080, 1920), color=(0, 0, 0), duration=duration)
+        else:
+            print("Video dimensions are valid, proceeding with actual video")
         
         # Create text clip using label method (doesn't require ImageMagick)
         text_clip = TextClip(
@@ -408,6 +439,14 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         text_clip.close()
         final_clip.close()
         
+        # Clean up temporary video file if it exists
+        if temp_video_path and os.path.exists(temp_video_path):
+            try:
+                os.unlink(temp_video_path)
+                print(f"Cleaned up temporary video file: {temp_video_path}")
+            except Exception as cleanup_error:
+                print(f"Warning: Could not clean up temporary file {temp_video_path}: {cleanup_error}")
+        
         print(f"Video created successfully: {output_path}")
         return True
         
@@ -415,6 +454,15 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         print(f"Error creating video: {e}")
         import traceback
         traceback.print_exc()
+        
+        # Clean up temporary video file if it exists (even on error)
+        if temp_video_path and os.path.exists(temp_video_path):
+            try:
+                os.unlink(temp_video_path)
+                print(f"Cleaned up temporary video file after error: {temp_video_path}")
+            except Exception as cleanup_error:
+                print(f"Warning: Could not clean up temporary file after error {temp_video_path}: {cleanup_error}")
+        
         return False
 
 if __name__ == '__main__':
