@@ -612,12 +612,17 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         else:
             print("Video dimensions are valid, proceeding with actual video")
         
+        # Ensure minimum font size for readability
+        min_font_size = 40
+        effective_font_size = max(font_size, min_font_size)
+        print(f"Font size: requested={font_size}, effective={effective_font_size}")
+        
         # Create text using PIL (completely bypasses MoviePy's text rendering)
         text_clip = create_text_clip_with_pil(
             poem_text, 
             video_clip.w, 
             video_clip.h, 
-            font_size, 
+            effective_font_size, 
             text_color, 
             duration
         )

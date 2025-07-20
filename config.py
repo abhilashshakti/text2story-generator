@@ -29,7 +29,7 @@ class Config:
     
     # Video settings
     DEFAULT_VIDEO_DURATION = 15  # seconds
-    DEFAULT_FONT_SIZE = 60
+    DEFAULT_FONT_SIZE = 80  # Increased for better readability
     DEFAULT_TEXT_COLOR = '#FFFFFF'
     
     # Supported video formats
