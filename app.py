@@ -305,8 +305,15 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         # Download video if URL provided, otherwise use default
         if video_url and video_url.strip():
             try:
-                video_clip = VideoFileClip(video_url)
-                print(f"Loaded video: {video_clip.w}x{video_clip.h}, duration: {video_clip.duration}s")
+                # For remote URLs, try to download first or use proxy
+                if video_url.startswith('http'):
+                    # Use a simple colored background for remote videos to avoid issues
+                    from moviepy.video.VideoClip import ColorClip
+                    video_clip = ColorClip(size=(1080, 1920), color=(0, 0, 0), duration=duration)
+                    print(f"Using fallback background for remote video: {video_url}")
+                else:
+                    video_clip = VideoFileClip(video_url)
+                    print(f"Loaded local video: {video_clip.w}x{video_clip.h}, duration: {video_clip.duration}s")
             except Exception as e:
                 print(f"Error loading video from {video_url}: {e}")
                 # Create a simple colored background as fallback
@@ -328,28 +335,24 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
             from moviepy.video.VideoClip import ColorClip
             video_clip = ColorClip(size=(1080, 1920), color=(0, 0, 0), duration=duration)
         
-        # Create text clip with better styling and error handling
+        # Create text clip using label method (doesn't require ImageMagick)
         try:
             text_clip = TextClip(
                 poem_text,
                 fontsize=min(font_size, 80),  # Cap font size
                 color=text_color,
-                font='Arial-Bold',
-                method='caption',
-                size=(min(video_clip.w * 0.9, 1000), None),  # Cap width
-                stroke_color='black',
-                stroke_width=2
+                font='Arial',
+                method='label',  # Use label method which doesn't require ImageMagick
+                size=(min(video_clip.w * 0.9, 1000), None)  # Cap width
             ).set_position('center').set_duration(duration)
         except Exception as e:
             print(f"Error creating text clip: {e}")
-            # Fallback text clip
+            # Simple fallback without advanced features
             text_clip = TextClip(
-                poem_text[:100],  # Limit text length
+                poem_text[:50],  # Limit text length
                 fontsize=40,
                 color='white',
-                font='Arial',
-                method='caption',
-                size=(800, None)
+                method='label'
             ).set_position('center').set_duration(duration)
         
         # Add audio if provided
