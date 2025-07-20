@@ -5,6 +5,7 @@ import os
 import requests
 import tempfile
 import uuid
+import numpy as np
 from werkzeug.utils import secure_filename
 import json
 from config import Config
@@ -297,6 +298,121 @@ def search_poems():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def create_text_clip_with_pil(text, video_width, video_height, font_size, text_color, duration):
+    """Create a text clip using PIL instead of MoviePy's TextClip to avoid ImageMagick issues"""
+    try:
+        from moviepy.video.VideoClip import ImageClip
+        import textwrap
+        
+        # Parse color - handle hex colors like '#ffffff' or named colors like 'white'
+        if text_color.startswith('#'):
+            # Convert hex to RGB
+            text_color = text_color.lstrip('#')
+            color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
+        else:
+            # Named colors - convert to RGB
+            color_map = {
+                'white': (255, 255, 255),
+                'black': (0, 0, 0),
+                'red': (255, 0, 0),
+                'green': (0, 255, 0),
+                'blue': (0, 0, 255),
+                'yellow': (255, 255, 0),
+                'cyan': (0, 255, 255),
+                'magenta': (255, 0, 255)
+            }
+            color_rgb = color_map.get(text_color.lower(), (255, 255, 255))
+        
+        # Calculate text area dimensions (90% of video width, allow for height)
+        text_width = int(video_width * 0.9)
+        text_height = int(video_height * 0.8)
+        
+        # Create image with transparent background
+        img = Image.new('RGBA', (text_width, text_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Try to use a system font, fallback to default
+        try:
+            # Try common system fonts
+            font_paths = [
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+                '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+                '/System/Library/Fonts/Arial.ttf',  # macOS
+                '/System/Library/Fonts/Helvetica.ttc',  # macOS
+            ]
+            
+            font = None
+            for font_path in font_paths:
+                if os.path.exists(font_path):
+                    font = ImageFont.truetype(font_path, font_size)
+                    break
+            
+            if font is None:
+                # Use default font if no truetype font found
+                font = ImageFont.load_default()
+                print("Using default font - truetype fonts not found")
+            else:
+                print(f"Using font: {font_path}")
+                
+        except Exception as font_error:
+            print(f"Font loading error: {font_error}")
+            font = ImageFont.load_default()
+        
+        # Wrap text to fit width
+        avg_char_width = font_size * 0.6  # Rough estimate
+        chars_per_line = int(text_width / avg_char_width)
+        wrapped_lines = textwrap.wrap(text, width=max(chars_per_line, 20))
+        
+        # Calculate total text height
+        line_height = font_size + 10  # Add some line spacing
+        total_text_height = len(wrapped_lines) * line_height
+        
+        # Center the text vertically
+        start_y = max(0, (text_height - total_text_height) // 2)
+        
+        # Draw each line
+        for i, line in enumerate(wrapped_lines):
+            # Get text bbox to center horizontally
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_line_width = bbox[2] - bbox[0]
+            x = max(0, (text_width - text_line_width) // 2)
+            y = start_y + (i * line_height)
+            
+            # Draw text with outline for better visibility
+            outline_width = 2
+            for dx in range(-outline_width, outline_width + 1):
+                for dy in range(-outline_width, outline_width + 1):
+                    if dx != 0 or dy != 0:
+                        draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 128))
+            
+            # Draw main text
+            draw.text((x, y), line, font=font, fill=(*color_rgb, 255))
+        
+        # Convert PIL image to numpy array for MoviePy
+        img_array = np.array(img)
+        
+        # Create ImageClip
+        text_clip = ImageClip(img_array, transparent=True, duration=duration)
+        text_clip = text_clip.set_position('center')
+        
+        print(f"Created text clip with PIL: {text_width}x{text_height}, {len(wrapped_lines)} lines")
+        return text_clip
+        
+    except Exception as e:
+        print(f"Error creating text with PIL: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Ultimate fallback: create a simple colored rectangle
+        from moviepy.video.VideoClip import ColorClip
+        fallback_clip = ColorClip(
+            size=(int(video_width * 0.8), 100), 
+            color=(255, 255, 255), 
+            duration=duration
+        ).set_position('center')
+        print("Created fallback colored rectangle")
+        return fallback_clip
+
 def create_story_video(poem_text, video_url, audio_url, font_size, text_color, duration, output_path):
     """Create Instagram story video with poem overlay"""
     temp_video_path = None  # Track temporary video file for cleanup
@@ -366,45 +482,50 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         else:
             print("Video dimensions are valid, proceeding with actual video")
         
-        # Create text clip using label method (doesn't require ImageMagick)
-        try:
-            text_clip = TextClip(
-                poem_text,
-                fontsize=min(font_size, 80),  # Cap font size
-                color=text_color,
-                font='Arial',
-                method='label',  # Use label method which doesn't require ImageMagick
-                size=(min(video_clip.w * 0.9, 1000), None)  # Cap width
-            ).set_position('center').set_duration(duration)
-        except Exception as text_error:
-            print(f"Error creating text clip with label method: {text_error}")
-            # Fallback: try with caption method
-            try:
-                text_clip = TextClip(
-                    poem_text,
-                    fontsize=min(font_size, 80),
-                    color=text_color,
-                    font='Arial',
-                    method='caption',
-                    size=(min(video_clip.w * 0.9, 1000), None)
-                ).set_position('center').set_duration(duration)
-                print("Successfully created text clip with caption method")
-            except Exception as caption_error:
-                print(f"Error creating text clip with caption method: {caption_error}")
-                # Final fallback: create a simple colored rectangle as placeholder
-                from moviepy.video.VideoClip import ColorClip
-                text_clip = ColorClip(
-                    size=(min(video_clip.w * 0.9, 1000), 100), 
-                    color=(255, 255, 255), 
-                    duration=duration
-                ).set_position('center')
-                print("Created fallback colored rectangle instead of text")
+        # Create text using PIL (completely bypasses MoviePy's text rendering)
+        text_clip = create_text_clip_with_pil(
+            poem_text, 
+            video_clip.w, 
+            video_clip.h, 
+            min(font_size, 80), 
+            text_color, 
+            duration
+        )
         
         # Add audio if provided
         if audio_url and audio_url.strip():
             try:
-                audio_clip = AudioFileClip(audio_url)
-                print(f"Loaded audio: {audio_clip.duration}s")
+                # For remote URLs, download audio first to avoid streaming issues
+                if audio_url.startswith('http'):
+                    print(f"Downloading remote audio: {audio_url}")
+                    
+                    # Download audio to temporary file
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Accept': 'audio/*,*/*;q=0.9'
+                    }
+                    
+                    response = requests.get(audio_url, headers=headers, stream=True, timeout=15)
+                    response.raise_for_status()
+                    
+                    # Create temporary file for audio
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_audio:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            temp_audio.write(chunk)
+                        temp_audio_path = temp_audio.name
+                    
+                    # Load audio from temporary file
+                    audio_clip = AudioFileClip(temp_audio_path)
+                    print(f"Downloaded and loaded remote audio: {audio_clip.duration}s")
+                    
+                    # Clean up temp file after loading
+                    try:
+                        os.unlink(temp_audio_path)
+                    except:
+                        pass
+                else:
+                    audio_clip = AudioFileClip(audio_url)
+                    print(f"Loaded local audio: {audio_clip.duration}s")
                 
                 # Validate audio duration
                 if audio_clip.duration <= 0:
@@ -422,9 +543,10 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
                     audio_clip.close()
                     
             except Exception as e:
-                print(f"Error adding audio: {e}")
+                print(f"Error adding audio from {audio_url}: {e}")
                 import traceback
                 traceback.print_exc()
+                print("Continuing without audio...")
                 pass  # Continue without audio if there's an error
         
         # Composite video and text
