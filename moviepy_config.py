@@ -1,4 +1,5 @@
 import os
+import subprocess
 from moviepy.config import change_settings
 
 # Detect the operating system and set appropriate ImageMagick path
@@ -24,12 +25,25 @@ def get_imagemagick_path():
     # Try to find a working ImageMagick installation
     for path in possible_paths:
         try:
-            import subprocess
-            result = subprocess.run([path, '--version'], 
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                print(f"Found ImageMagick at: {path}")
-                return path
+            # Handle wildcard paths for Nixpacks
+            if '*' in path:
+                import glob
+                matching_paths = glob.glob(path)
+                for match_path in matching_paths:
+                    try:
+                        result = subprocess.run([match_path, '--version'], 
+                                              capture_output=True, text=True, timeout=5)
+                        if result.returncode == 0:
+                            print(f"Found ImageMagick at: {match_path}")
+                            return match_path
+                    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                        continue
+            else:
+                result = subprocess.run([path, '--version'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    print(f"Found ImageMagick at: {path}")
+                    return path
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             continue
     
@@ -40,9 +54,10 @@ def get_imagemagick_path():
 # Get the appropriate ImageMagick path
 IMAGEMAGICK_BINARY = get_imagemagick_path()
 
-# Configure MoviePy
-if IMAGEMAGICK_BINARY:
+# Configure MoviePy - only set if we have a valid binary
+if IMAGEMAGICK_BINARY and os.path.exists(IMAGEMAGICK_BINARY):
     change_settings({"IMAGEMAGICK_BINARY": IMAGEMAGICK_BINARY})
     print(f"MoviePy configured to use ImageMagick at: {IMAGEMAGICK_BINARY}")
 else:
-    print("MoviePy will use fallback text rendering (no ImageMagick)") 
+    print("MoviePy will use fallback text rendering (no ImageMagick)")
+    # Don't set IMAGEMAGICK_BINARY to avoid the 'unset' error 

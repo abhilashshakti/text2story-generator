@@ -198,6 +198,8 @@ text2story-generator/
 - Default duration: 15 seconds
 - Default font size: 60px
 - Default text color: White
+
+
 - Supported formats: MP4, AVI, MOV, MKV
 
 ### Audio Settings

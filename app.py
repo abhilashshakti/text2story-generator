@@ -336,24 +336,14 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
             video_clip = ColorClip(size=(1080, 1920), color=(0, 0, 0), duration=duration)
         
         # Create text clip using label method (doesn't require ImageMagick)
-        try:
-            text_clip = TextClip(
-                poem_text,
-                fontsize=min(font_size, 80),  # Cap font size
-                color=text_color,
-                font='Arial',
-                method='label',  # Use label method which doesn't require ImageMagick
-                size=(min(video_clip.w * 0.9, 1000), None)  # Cap width
-            ).set_position('center').set_duration(duration)
-        except Exception as e:
-            print(f"Error creating text clip: {e}")
-            # Simple fallback without advanced features
-            text_clip = TextClip(
-                poem_text[:50],  # Limit text length
-                fontsize=40,
-                color='white',
-                method='label'
-            ).set_position('center').set_duration(duration)
+        text_clip = TextClip(
+            poem_text,
+            fontsize=min(font_size, 80),  # Cap font size
+            color=text_color,
+            font='Arial',
+            method='label',  # Use label method which doesn't require ImageMagick
+            size=(min(video_clip.w * 0.9, 1000), None)  # Cap width
+        ).set_position('center').set_duration(duration)
         
         # Add audio if provided
         if audio_url and audio_url.strip():
