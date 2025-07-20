@@ -94,7 +94,7 @@ follow your most intense obsessions mercilessly.</textarea>
                                 <input 
                                     type="range" 
                                     id="fontSize" 
-                                    min="30" 
+                                    min="0" 
                                     max="100" 
                                     value="60"
                                     class="w-full"
@@ -111,8 +111,8 @@ follow your most intense obsessions mercilessly.</textarea>
                                 <input 
                                     type="range" 
                                     id="duration" 
-                                    min="5" 
-                                    max="30" 
+                                    min="0" 
+                                    max="120" 
                                     value="15"
                                     class="w-full"
                                 >
@@ -138,16 +138,9 @@ follow your most intense obsessions mercilessly.</textarea>
                             <button 
                                 type="button" 
                                 id="previewTextBtn"
-                                class="w-1/2 bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-md transition duration-200"
+                                class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-md transition duration-200"
                             >
                                 <i class="fas fa-eye mr-2"></i>Preview Text
-                            </button>
-                            <button 
-                                type="button" 
-                                id="analyzeBtn"
-                                class="w-1/2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-md transition duration-200"
-                            >
-                                <i class="fas fa-brain mr-2"></i>Analyze Theme
                             </button>
                         </div>
                     </form>
@@ -167,6 +160,17 @@ follow your most intense obsessions mercilessly.</textarea>
                             <p>Preview shows white text on black background for maximum visibility</p>
                         </div>
                     </div>
+                </div>
+
+                <!-- Analyze Theme Button -->
+                <div class="bg-white rounded-lg shadow-lg p-6 mt-6 card-hover">
+                    <button 
+                        type="button" 
+                        id="analyzeBtn"
+                        class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-md transition duration-200"
+                    >
+                        <i class="fas fa-brain mr-2"></i>Analyze Theme
+                    </button>
                 </div>
 
                 <!-- Analysis Results -->
@@ -529,6 +533,22 @@ follow your most intense obsessions mercilessly.</textarea>
             }
 
             showLoading('Analyzing poem theme...');
+            
+            // Clear previous selections and reset sections
+            selectedVideo = null;
+            selectedAudio = null;
+            
+            // Clear previous content
+            analysisContent.innerHTML = '';
+            videoOptions.innerHTML = '';
+            audioOptions.innerHTML = '';
+            
+            // Hide sections initially
+            analysisResults.style.display = 'none';
+            mediaSelection.style.display = 'none';
+            
+            // Update selection status
+            updateSelectionStatus();
             
             try {
                 const response = await axios.post('/analyze-poem', {

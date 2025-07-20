@@ -256,24 +256,20 @@ def create_text_preview_image_in_memory(text, font_size, text_color):
         # Parse color
         color_rgb = parse_color(text_color)
         
-        # Calculate effective font size (scale up for better quality)
-        effective_font_size = max(font_size * 2, 80)
-        
         # Load font
-        font, used_font_path = load_font_with_fallback(effective_font_size)
+        font, used_font_path = load_font_with_fallback(font_size)
         
         if font is None:
             print("⚠️ No system fonts found, using default font")
             font = ImageFont.load_default()
-            effective_font_size = max(font_size * 3, 100)  # Make default font larger
         
         # Process text lines with intelligent wrapping
-        processed_lines = process_text_lines(text, effective_font_size, text_width)
+        processed_lines = process_text_lines(text, font_size, text_width)
         
         print(f"📝 Processed into {len(processed_lines)} lines for preview")
         
         # Calculate optimal line height and spacing
-        line_height = calculate_line_height(draw, font, effective_font_size)
+        line_height = calculate_line_height(draw, font, font_size)
         
         # Calculate total text height
         total_text_height = len(processed_lines) * line_height
@@ -300,7 +296,7 @@ def create_text_preview_image_in_memory(text, font_size, text_color):
             print(f"✍️ Drawing line {i+1}: '{line}' at ({x}, {y})")
             
             # Draw text with enhanced outline for maximum visibility
-            outline_width = max(3, effective_font_size // 20)  # Proportional outline
+            outline_width = max(3, font_size // 20)  # Proportional outline
             
             # Draw black outline for contrast
             for dx in range(-outline_width, outline_width + 1):
