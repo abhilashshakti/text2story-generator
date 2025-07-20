@@ -55,46 +55,83 @@ def cleanup_old_temp_files():
 import time
 
 def get_available_fonts():
-    """Detect available fonts in the current environment"""
+    """Detect available fonts in the current environment with better Railway compatibility"""
     available_fonts = []
     
-    # Common font directories to check
+    print("🔍 Starting font detection...")
+    
+    # More comprehensive font directories for Railway/Linux containers
     font_directories = [
-        '/usr/share/fonts/',
-        '/usr/local/share/fonts/',
-        '/System/Library/Fonts/',  # macOS
-        '/Library/Fonts/',         # macOS
-        '/usr/share/fonts/truetype/',
-        '/usr/share/fonts/TTF/',
-        '/usr/share/fonts/opentype/'
+        '/usr/share/fonts',
+        '/usr/local/share/fonts',
+        '/usr/share/fonts/truetype',
+        '/usr/share/fonts/TTF',
+        '/usr/share/fonts/opentype',
+        '/usr/share/fonts/Type1',
+        '/usr/share/fonts/X11',
+        '/usr/share/fonts/misc',
+        '/usr/local/lib/X11/fonts',
+        '/opt/X11/share/fonts',  # Some containers
+        '/System/Library/Fonts',  # macOS
+        '/Library/Fonts',         # macOS
+        '/var/lib/defoma/fontconfig.d',  # Debian
     ]
     
-    # Font files to look for
-    font_patterns = [
-        '**/DejaVu*Bold*.ttf',
-        '**/Liberation*Bold*.ttf', 
-        '**/Ubuntu*Bold*.ttf',
-        '**/Arial*.ttf',
-        '**/Helvetica*.ttf',
-        '**/Roboto*Bold*.ttf',
-        '**/OpenSans*Bold*.ttf',
-        '**/*Sans*Bold*.ttf',
-        '**/*bold*.ttf',
-        '**/*.ttf'
-    ]
-    
-    import glob
-    
+    # Check which directories actually exist
+    existing_dirs = []
     for font_dir in font_directories:
         if os.path.exists(font_dir):
-            for pattern in font_patterns:
-                font_path = os.path.join(font_dir, pattern)
-                matches = glob.glob(font_path, recursive=True)
-                for match in matches[:3]:  # Limit to first 3 matches per pattern
-                    if match not in available_fonts:
-                        available_fonts.append(match)
+            existing_dirs.append(font_dir)
+            print(f"📁 Found font directory: {font_dir}")
     
-    print(f"🔍 Found {len(available_fonts)} font files: {available_fonts[:5]}...")
+    if not existing_dirs:
+        print("⚠️ No standard font directories found!")
+        return []
+    
+    # Simple recursive search for TTF files
+    import glob
+    
+    for font_dir in existing_dirs:
+        try:
+            # Use simpler glob patterns that work better in containers
+            ttf_pattern = os.path.join(font_dir, "**", "*.ttf")
+            ttf_files = glob.glob(ttf_pattern, recursive=True)
+            
+            otf_pattern = os.path.join(font_dir, "**", "*.otf") 
+            otf_files = glob.glob(otf_pattern, recursive=True)
+            
+            all_fonts = ttf_files + otf_files
+            
+            # Prioritize common fonts
+            priority_fonts = []
+            regular_fonts = []
+            
+            for font_file in all_fonts:
+                font_name = os.path.basename(font_file).lower()
+                # Look for high-quality fonts first
+                if any(keyword in font_name for keyword in ['dejavu', 'liberation', 'ubuntu', 'roboto', 'opensans']):
+                    priority_fonts.append(font_file)
+                else:
+                    regular_fonts.append(font_file)
+            
+            # Add priority fonts first, then regular fonts
+            for font_file in priority_fonts + regular_fonts:
+                if font_file not in available_fonts:
+                    available_fonts.append(font_file)
+                    if len(available_fonts) >= 10:  # Limit to first 10 fonts
+                        break
+                        
+        except Exception as e:
+            print(f"❌ Error scanning {font_dir}: {e}")
+            continue
+    
+    print(f"🔍 Found {len(available_fonts)} font files:")
+    for i, font in enumerate(available_fonts[:5]):
+        print(f"   {i+1}. {os.path.basename(font)}")
+    
+    if len(available_fonts) > 5:
+        print(f"   ... and {len(available_fonts) - 5} more")
+    
     return available_fonts
 
 @app.route('/')
@@ -450,6 +487,71 @@ def search_poems():
             'success': True,
             'results': results
         })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/debug-fonts')
+def debug_fonts():
+    """Debug endpoint to see what's available in Railway's container"""
+    try:
+        import glob
+        
+        debug_info = {
+            "environment": "production" if os.environ.get('PORT') else 'development',
+            "platform": os.name,
+            "available_directories": [],
+            "font_files_found": [],
+            "all_usr_share_contents": [],
+            "font_search_results": {}
+        }
+        
+        # Check common directories
+        check_dirs = [
+            '/usr/share/fonts',
+            '/usr/local/share/fonts', 
+            '/usr/share/fonts/truetype',
+            '/usr/share/fonts/TTF',
+            '/usr/share',
+            '/usr',
+            '/opt',
+            '/var',
+            '/etc'
+        ]
+        
+        for dir_path in check_dirs:
+            if os.path.exists(dir_path):
+                debug_info["available_directories"].append(dir_path)
+                
+                # If it's /usr/share, list its contents
+                if dir_path == '/usr/share':
+                    try:
+                        contents = os.listdir(dir_path)
+                        debug_info["all_usr_share_contents"] = sorted(contents)
+                    except:
+                        pass
+        
+        # Try to find ANY font files in the system
+        search_patterns = [
+            '/usr/**/*.ttf',
+            '/usr/**/*.otf', 
+            '/opt/**/*.ttf',
+            '/var/**/*.ttf',
+            '/**/*.ttf'  # Last resort - search everywhere (might be slow)
+        ]
+        
+        for pattern in search_patterns:
+            try:
+                matches = glob.glob(pattern, recursive=True)
+                debug_info["font_search_results"][pattern] = matches[:10]  # Limit results
+            except Exception as e:
+                debug_info["font_search_results"][pattern] = f"Error: {str(e)}"
+        
+        # Use our font detection function
+        detected_fonts = get_available_fonts()
+        debug_info["detected_fonts"] = detected_fonts
+        
+        return jsonify(debug_info)
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
