@@ -750,4 +750,4 @@ if __name__ == '__main__':
     # Use environment variable for port, default to 5001 for local development
     port = int(os.environ.get('PORT', 5001))
     debug = os.environ.get('FLASK_ENV') == 'development'
-    app.run(debug=debug, host='0.0.0.0', port=port) 
+    app.run(debug=debug, host='0.0.0.0', port=port) # Cache bust: Sun Jul 20 01:34:12 PDT 2025
