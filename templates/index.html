@@ -619,37 +619,61 @@ follow your most intense obsessions mercilessly.</textarea>
             const videoPreview = document.getElementById('videoPreview');
             const videoPreviewTitle = document.getElementById('videoPreviewTitle');
             const videoPreviewInfo = document.getElementById('videoPreviewInfo');
+            const videoContainer = document.querySelector('#videoPreviewModal .aspect-video');
 
-            // Try to load the video through our proxy
+            // Clean up any existing state before loading new video
+            videoPreview.pause();
+            videoPreview.src = '';
+            videoPreview.load(); // Reset the video element
+            
+            // Clear any existing event handlers
+            videoPreview.onerror = null;
+            videoPreview.onloadstart = null;
+            videoPreview.oncanplay = null;
+            
+            // Remove any existing fallback messages
+            const existingFallbacks = videoContainer.querySelectorAll('.absolute');
+            existingFallbacks.forEach(div => div.remove());
+
+            // Set up the new video
+            videoPreviewTitle.textContent = video.title;
+            videoPreviewInfo.textContent = `${video.duration}s • ${video.source}`;
+            videoPreview.dataset.videoId = videoId;
+
+            // Set up error handling before setting the source
+            videoPreview.onerror = function() {
+                console.error('Error loading video:', video.url);
+                // Check if fallback already exists to prevent duplicates
+                if (!videoContainer.querySelector('.video-fallback')) {
+                    const fallbackDiv = document.createElement('div');
+                    fallbackDiv.className = 'video-fallback absolute inset-0 flex items-center justify-center bg-gray-100';
+                    fallbackDiv.innerHTML = `
+                        <div class="text-center">
+                            <i class="fas fa-video text-4xl text-gray-400 mb-4"></i>
+                            <p class="text-gray-600">Video Preview</p>
+                            <p class="text-sm text-gray-500 mt-2">Duration: ${video.duration}s • Source: ${video.source}</p>
+                            <p class="text-sm text-gray-500">This video will be used for story generation</p>
+                            <button onclick="selectVideoFromPreview()" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+                                Select This Video
+                            </button>
+                        </div>
+                    `;
+                    videoContainer.appendChild(fallbackDiv);
+                }
+            };
+
+            // Set up success handling
+            videoPreview.oncanplay = function() {
+                console.log('Video loaded successfully');
+                // Remove any fallback messages since video loaded
+                const fallbacks = videoContainer.querySelectorAll('.video-fallback');
+                fallbacks.forEach(div => div.remove());
+            };
+
+            // Now set the source to trigger loading
             const proxyUrl = `/proxy-media?url=${encodeURIComponent(video.url)}&type=video`;
             console.log('Loading video via proxy:', proxyUrl);
             videoPreview.src = proxyUrl;
-            videoPreviewTitle.textContent = video.title;
-            videoPreviewInfo.textContent = `${video.duration}s • ${video.source}`;
-
-            // Store the video ID for selection
-            videoPreview.dataset.videoId = videoId;
-
-            // Add error handling
-            videoPreview.onerror = function() {
-                console.error('Error loading video:', video.url);
-                // Show a fallback message but keep the video element
-                const videoContainer = document.querySelector('#videoPreviewModal .aspect-video');
-                const fallbackDiv = document.createElement('div');
-                fallbackDiv.className = 'absolute inset-0 flex items-center justify-center bg-gray-100';
-                fallbackDiv.innerHTML = `
-                    <div class="text-center">
-                        <i class="fas fa-video text-4xl text-gray-400 mb-4"></i>
-                        <p class="text-gray-600">Video Preview</p>
-                        <p class="text-sm text-gray-500 mt-2">Duration: ${video.duration}s • Source: ${video.source}</p>
-                        <p class="text-sm text-gray-500">This video will be used for story generation</p>
-                        <button onclick="selectVideoFromPreview()" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
-                            Select This Video
-                        </button>
-                    </div>
-                `;
-                videoContainer.appendChild(fallbackDiv);
-            };
 
             document.getElementById('videoPreviewModal').classList.remove('hidden');
         }
@@ -670,33 +694,57 @@ follow your most intense obsessions mercilessly.</textarea>
             const audioPreview = document.getElementById('audioPreview');
             const audioPreviewTitle = document.getElementById('audioPreviewTitle');
             const audioPreviewInfo = document.getElementById('audioPreviewInfo');
+            const audioContainer = document.querySelector('#audioPreviewModal .bg-gray-100');
 
-            // Try to load the audio through our proxy
+            // Clean up any existing state before loading new audio
+            audioPreview.pause();
+            audioPreview.src = '';
+            audioPreview.load(); // Reset the audio element
+            
+            // Clear any existing event handlers
+            audioPreview.onerror = null;
+            audioPreview.onloadstart = null;
+            audioPreview.oncanplay = null;
+            
+            // Remove any existing fallback messages
+            const existingFallbacks = audioContainer.querySelectorAll('.absolute');
+            existingFallbacks.forEach(div => div.remove());
+
+            // Set up the new audio
+            audioPreviewTitle.textContent = audio.title;
+            audioPreviewInfo.textContent = `${audio.duration}s • ${audio.source}`;
+            audioPreview.dataset.audioId = audioId;
+
+            // Set up error handling before setting the source
+            audioPreview.onerror = function() {
+                console.error('Error loading audio:', audio.url);
+                // Check if fallback already exists to prevent duplicates
+                if (!audioContainer.querySelector('.audio-fallback')) {
+                    const fallbackDiv = document.createElement('div');
+                    fallbackDiv.className = 'audio-fallback absolute inset-0 flex items-center justify-center bg-gray-100';
+                    fallbackDiv.innerHTML = `
+                        <div class="text-center">
+                            <i class="fas fa-music text-4xl text-gray-400 mb-4"></i>
+                            <p class="text-gray-600">Preview not available</p>
+                            <p class="text-sm text-gray-500 mt-2">This audio can still be used for story generation</p>
+                        </div>
+                    `;
+                    audioContainer.appendChild(fallbackDiv);
+                }
+            };
+
+            // Set up success handling
+            audioPreview.oncanplay = function() {
+                console.log('Audio loaded successfully');
+                // Remove any fallback messages since audio loaded
+                const fallbacks = audioContainer.querySelectorAll('.audio-fallback');
+                fallbacks.forEach(div => div.remove());
+            };
+
+            // Now set the source to trigger loading
             const proxyUrl = `/proxy-media?url=${encodeURIComponent(audio.url)}&type=audio`;
             console.log('Loading audio via proxy:', proxyUrl);
             audioPreview.src = proxyUrl;
-            audioPreviewTitle.textContent = audio.title;
-            audioPreviewInfo.textContent = `${audio.duration}s • ${audio.source}`;
-
-            // Store the audio ID for selection
-            audioPreview.dataset.audioId = audioId;
-
-            // Add error handling
-            audioPreview.onerror = function() {
-                console.error('Error loading audio:', audio.url);
-                // Show a fallback message but keep the audio element
-                const audioContainer = document.querySelector('#audioPreviewModal .bg-gray-100');
-                const fallbackDiv = document.createElement('div');
-                fallbackDiv.className = 'absolute inset-0 flex items-center justify-center bg-gray-100';
-                fallbackDiv.innerHTML = `
-                    <div class="text-center">
-                        <i class="fas fa-music text-4xl text-gray-400 mb-4"></i>
-                        <p class="text-gray-600">Preview not available</p>
-                        <p class="text-sm text-gray-500 mt-2">This audio can still be used for story generation</p>
-                    </div>
-                `;
-                audioContainer.appendChild(fallbackDiv);
-            };
 
             document.getElementById('audioPreviewModal').classList.remove('hidden');
         }
@@ -742,14 +790,21 @@ follow your most intense obsessions mercilessly.</textarea>
             // Clean up video
             videoPreview.pause();
             videoPreview.src = '';
+            videoPreview.load(); // Reset the video element completely
+            
+            // Clear all event handlers
+            videoPreview.onerror = null;
+            videoPreview.onloadstart = null;
+            videoPreview.oncanplay = null;
             
             // Clean up search result data
             delete videoPreview.dataset.searchUrl;
             delete videoPreview.dataset.searchTitle;
             delete videoPreview.dataset.searchType;
+            delete videoPreview.dataset.videoId;
             
-            // Remove any fallback messages
-            const fallbackDivs = videoContainer.querySelectorAll('.absolute');
+            // Remove any fallback messages (both old .absolute and new .video-fallback)
+            const fallbackDivs = videoContainer.querySelectorAll('.absolute, .video-fallback');
             fallbackDivs.forEach(div => div.remove());
             
             document.getElementById('videoPreviewModal').classList.add('hidden');
@@ -762,14 +817,21 @@ follow your most intense obsessions mercilessly.</textarea>
             // Clean up audio
             audioPreview.pause();
             audioPreview.src = '';
+            audioPreview.load(); // Reset the audio element completely
+            
+            // Clear all event handlers
+            audioPreview.onerror = null;
+            audioPreview.onloadstart = null;
+            audioPreview.oncanplay = null;
             
             // Clean up search result data
             delete audioPreview.dataset.searchUrl;
             delete audioPreview.dataset.searchTitle;
             delete audioPreview.dataset.searchType;
+            delete audioPreview.dataset.audioId;
             
-            // Remove any fallback messages
-            const fallbackDivs = audioContainer.querySelectorAll('.absolute');
+            // Remove any fallback messages (both old .absolute and new .audio-fallback)
+            const fallbackDivs = audioContainer.querySelectorAll('.absolute, .audio-fallback');
             fallbackDivs.forEach(div => div.remove());
             
             document.getElementById('audioPreviewModal').classList.add('hidden');
