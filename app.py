@@ -55,12 +55,25 @@ def cleanup_old_temp_files():
 import time
 
 def get_available_fonts():
-    """Detect available fonts in the current environment with better Railway compatibility"""
+    """Detect available fonts with bundled high-quality fonts prioritized"""
     available_fonts = []
     
-    print("🔍 Starting font detection...")
+    print("🔍 Starting font detection with bundled fonts...")
     
-    # More comprehensive font directories for Railway/Linux containers
+    # PRIORITY 1: Our bundled high-quality fonts (guaranteed to exist)
+    bundled_fonts = [
+        os.path.join('static', 'fonts', 'Roboto-Bold.ttf'),
+        os.path.join('static', 'fonts', 'Roboto-Regular.ttf')
+    ]
+    
+    for font_path in bundled_fonts:
+        if os.path.exists(font_path):
+            available_fonts.append(font_path)
+            print(f"✅ Found bundled font: {font_path}")
+        else:
+            print(f"❌ Missing bundled font: {font_path}")
+    
+    # PRIORITY 2: System fonts (if any exist in Railway)
     font_directories = [
         '/usr/share/fonts',
         '/usr/local/share/fonts',
@@ -68,32 +81,21 @@ def get_available_fonts():
         '/usr/share/fonts/TTF',
         '/usr/share/fonts/opentype',
         '/usr/share/fonts/Type1',
-        '/usr/share/fonts/X11',
-        '/usr/share/fonts/misc',
-        '/usr/local/lib/X11/fonts',
-        '/opt/X11/share/fonts',  # Some containers
         '/System/Library/Fonts',  # macOS
         '/Library/Fonts',         # macOS
-        '/var/lib/defoma/fontconfig.d',  # Debian
     ]
     
-    # Check which directories actually exist
     existing_dirs = []
     for font_dir in font_directories:
         if os.path.exists(font_dir):
             existing_dirs.append(font_dir)
-            print(f"📁 Found font directory: {font_dir}")
+            print(f"📁 Found system font directory: {font_dir}")
     
-    if not existing_dirs:
-        print("⚠️ No standard font directories found!")
-        return []
-    
-    # Simple recursive search for TTF files
+    # Simple recursive search for TTF/OTF files
     import glob
     
     for font_dir in existing_dirs:
         try:
-            # Use simpler glob patterns that work better in containers
             ttf_pattern = os.path.join(font_dir, "**", "*.ttf")
             ttf_files = glob.glob(ttf_pattern, recursive=True)
             
@@ -102,35 +104,34 @@ def get_available_fonts():
             
             all_fonts = ttf_files + otf_files
             
-            # Prioritize common fonts
+            # Prioritize common high-quality fonts
             priority_fonts = []
             regular_fonts = []
             
             for font_file in all_fonts:
                 font_name = os.path.basename(font_file).lower()
-                # Look for high-quality fonts first
                 if any(keyword in font_name for keyword in ['dejavu', 'liberation', 'ubuntu', 'roboto', 'opensans']):
                     priority_fonts.append(font_file)
                 else:
                     regular_fonts.append(font_file)
             
-            # Add priority fonts first, then regular fonts
+            # Add system fonts (avoiding duplicates)
             for font_file in priority_fonts + regular_fonts:
                 if font_file not in available_fonts:
                     available_fonts.append(font_file)
-                    if len(available_fonts) >= 10:  # Limit to first 10 fonts
+                    if len(available_fonts) >= 15:  # Limit total fonts
                         break
                         
         except Exception as e:
             print(f"❌ Error scanning {font_dir}: {e}")
             continue
     
-    print(f"🔍 Found {len(available_fonts)} font files:")
-    for i, font in enumerate(available_fonts[:5]):
+    print(f"🔍 Found {len(available_fonts)} total fonts:")
+    for i, font in enumerate(available_fonts[:8]):
         print(f"   {i+1}. {os.path.basename(font)}")
     
-    if len(available_fonts) > 5:
-        print(f"   ... and {len(available_fonts) - 5} more")
+    if len(available_fonts) > 8:
+        print(f"   ... and {len(available_fonts) - 8} more")
     
     return available_fonts
 
@@ -823,8 +824,8 @@ def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, te
         
         print(f"Creating enhanced PIL text clip for better quality")
         
-        # Render at 2x resolution for better quality
-        scale_factor = 2
+        # Render at 4x resolution for much better quality
+        scale_factor = 4
         text_width = int(video_width * 0.9 * scale_factor)
         text_height = int(video_height * 0.8 * scale_factor)
         scaled_font_size = font_size * scale_factor
@@ -845,28 +846,26 @@ def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, te
             }
             color_rgb = color_map.get(text_color.lower(), (255, 255, 255))
         
-        # Enhanced font loading with better quality fonts
+        # Use our bundled high-quality fonts first
+        available_fonts = get_available_fonts()
         font = None
-        font_paths = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-            '/System/Library/Fonts/Arial.ttf',  # macOS
-            '/System/Library/Fonts/Helvetica.ttc',  # macOS
-            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
-        ]
         
-        for font_path in font_paths:
-            if os.path.exists(font_path):
+        if available_fonts:
+            for font_path in available_fonts[:3]:  # Try first 3 fonts
                 try:
                     font = ImageFont.truetype(font_path, scaled_font_size)
-                    print(f"Using enhanced font: {font_path} at size {scaled_font_size}")
+                    print(f"✅ Using high-quality font: {os.path.basename(font_path)} at size {scaled_font_size}")
                     break
                 except Exception as e:
+                    print(f"❌ Failed to load {font_path}: {e}")
                     continue
         
         if font is None:
+            print("⚠️ No TrueType fonts available, using default font")
+            # Even with default font, we'll make it look better
             font = ImageFont.load_default()
-            print("Using default font for enhanced rendering")
+            # Compensate for default font limitations
+            scaled_font_size = max(scaled_font_size * 2, 100)  # Make default font much larger
         
         # Text wrapping with better calculations
         avg_char_width = scaled_font_size * 0.6
