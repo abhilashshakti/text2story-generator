@@ -335,6 +335,87 @@ def test_text_rendering():
     except Exception as e:
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
+@app.route('/test-text-image')
+def test_text_image():
+    """Test endpoint to generate a standalone text image for debugging"""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        
+        # Test parameters
+        test_text = "Don't bend;\ndon't water it down;\ndon't try to make it logical"
+        width, height = 1080, 1920
+        font_size = 60
+        text_color = "#FFFFFF"
+        
+        print(f"🧪 Testing text image generation: '{test_text}'")
+        
+        # Create image with black background
+        img = Image.new('RGB', (width, height), (0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Try to load fonts
+        available_fonts = get_available_fonts()
+        font = None
+        
+        if available_fonts:
+            for font_path in available_fonts[:3]:
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    print(f"✅ Using font: {os.path.basename(font_path)}")
+                    break
+                except Exception as e:
+                    print(f"❌ Failed font {font_path}: {e}")
+                    continue
+        
+        if font is None:
+            print("⚠️ Using default font")
+            font = ImageFont.load_default()
+        
+        # Parse color
+        if text_color.startswith('#'):
+            text_color = text_color.lstrip('#')
+            color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
+        else:
+            color_rgb = (255, 255, 255)
+        
+        # Draw text with outline
+        lines = test_text.split('\n')
+        line_height = font_size + 10
+        total_height = len(lines) * line_height
+        start_y = (height - total_height) // 2
+        
+        for i, line in enumerate(lines):
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_width = bbox[2] - bbox[0]
+            x = (width - text_width) // 2
+            y = start_y + (i * line_height)
+            
+            # Black outline
+            for dx in [-2, -1, 0, 1, 2]:
+                for dy in [-2, -1, 0, 1, 2]:
+                    if dx != 0 or dy != 0:
+                        draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0))
+            
+            # White text
+            draw.text((x, y), line, font=font, fill=color_rgb)
+            print(f"✅ Drew line: '{line}' at ({x}, {y})")
+        
+        # Save test image
+        test_path = os.path.join('temp', 'test_text_image.png')
+        os.makedirs('temp', exist_ok=True)
+        img.save(test_path)
+        
+        print(f"✅ Saved test image to {test_path}")
+        
+        # Return the image
+        return send_file(test_path, mimetype='image/png')
+        
+    except Exception as e:
+        print(f"❌ Error in test text image: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/proxy-media')
 def proxy_media():
     """Proxy media URLs to handle CORS and authentication issues"""
@@ -817,12 +898,24 @@ def create_text_clip_with_moviepy(text, video_width, video_height, font_size, te
         return create_enhanced_pil_text_clip(text, video_width, video_height, font_size, text_color, duration)
 
 def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, text_color, duration):
-    """Enhanced PIL text rendering with better quality settings"""
+    """Enhanced PIL text rendering with better quality settings and extensive debugging"""
     try:
         from moviepy.video.VideoClip import ImageClip
         import textwrap
         
-        print(f"Creating enhanced PIL text clip for better quality")
+        print(f"🔍 DEBUG: Creating enhanced PIL text clip")
+        print(f"🔍 DEBUG: Input - text='{text[:50]}...', size={video_width}x{video_height}, font_size={font_size}, color={text_color}")
+        
+        # Ensure text is properly formatted
+        if not text or not text.strip():
+            print("⚠️ Warning: Empty or whitespace-only text provided")
+            text = "No text provided"
+        
+        # Normalize text
+        text = text.strip()
+        import re
+        text = re.sub(r'\s+', ' ', text)
+        print(f"🔍 DEBUG: Normalized text: '{text}'")
         
         # Render at 4x resolution for much better quality
         scale_factor = 4
@@ -830,11 +923,13 @@ def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, te
         text_height = int(video_height * 0.8 * scale_factor)
         scaled_font_size = font_size * scale_factor
         
-        # Create high-resolution image
-        img = Image.new('RGBA', (text_width, text_height), (0, 0, 0, 0))
+        print(f"🔍 DEBUG: Scaled dimensions: {text_width}x{text_height}, font_size={scaled_font_size}")
+        
+        # Create high-resolution image with WHITE background for debugging
+        img = Image.new('RGBA', (text_width, text_height), (255, 255, 255, 255))  # White background
         draw = ImageDraw.Draw(img)
         
-        # Parse color
+        # Parse color - handle hex colors like '#ffffff' or named colors like 'white'
         if text_color.startswith('#'):
             text_color = text_color.lstrip('#')
             color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
@@ -845,6 +940,8 @@ def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, te
                 'cyan': (0, 255, 255), 'magenta': (255, 0, 255)
             }
             color_rgb = color_map.get(text_color.lower(), (255, 255, 255))
+        
+        print(f"🔍 DEBUG: Color RGB: {color_rgb}")
         
         # Use our bundled high-quality fonts first
         available_fonts = get_available_fonts()
@@ -862,22 +959,24 @@ def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, te
         
         if font is None:
             print("⚠️ No TrueType fonts available, using default font")
-            # Even with default font, we'll make it look better
             font = ImageFont.load_default()
-            # Compensate for default font limitations
-            scaled_font_size = max(scaled_font_size * 2, 100)  # Make default font much larger
+            scaled_font_size = max(scaled_font_size * 2, 100)
         
         # Text wrapping with better calculations
         avg_char_width = scaled_font_size * 0.6
         chars_per_line = max(20, int(text_width / avg_char_width))
         wrapped_lines = textwrap.wrap(text, width=chars_per_line)
         
+        print(f"🔍 DEBUG: Wrapped into {len(wrapped_lines)} lines: {wrapped_lines}")
+        
         # Calculate layout
-        line_height = int(scaled_font_size * 1.2)  # Better line spacing
+        line_height = int(scaled_font_size * 1.2)
         total_text_height = len(wrapped_lines) * line_height
         start_y = max(0, (text_height - total_text_height) // 2)
         
-        # Draw text with better outline quality
+        print(f"🔍 DEBUG: Layout - line_height={line_height}, total_height={total_text_height}, start_y={start_y}")
+        
+        # Draw each line with debugging
         for i, line in enumerate(wrapped_lines):
             if not line.strip():
                 continue
@@ -887,19 +986,120 @@ def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, te
             x = max(0, (text_width - text_line_width) // 2)
             y = start_y + (i * line_height)
             
-            # Better outline using multiple passes
-            outline_width = 3 * scale_factor
-            for offset in range(1, outline_width + 1):
-                for dx in [-offset, 0, offset]:
-                    for dy in [-offset, 0, offset]:
-                        if dx != 0 or dy != 0:
-                            draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, int(180 * (outline_width - offset + 1) / outline_width)))
+            print(f"🔍 DEBUG: Drawing line {i+1}: '{line}' at ({x}, {y})")
             
-            # Main text
+            # Draw text with BLACK outline for maximum visibility
+            outline_width = 4 * scale_factor
+            for dx in range(-outline_width, outline_width + 1):
+                for dy in range(-outline_width, outline_width + 1):
+                    if dx != 0 or dy != 0:
+                        draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 255))  # Black outline
+            
+            # Draw main text in the specified color
             draw.text((x, y), line, font=font, fill=(*color_rgb, 255))
+            print(f"✅ Drew line {i+1} with color {color_rgb}")
+        
+        # Save debug image to see what we're creating
+        debug_path = os.path.join('temp', f'debug_text_{uuid.uuid4().hex[:8]}.png')
+        os.makedirs('temp', exist_ok=True)
+        img.save(debug_path)
+        print(f"🔍 DEBUG: Saved text image to {debug_path}")
         
         # Resize back to original resolution with high-quality resampling
-        img = img.resize((int(video_width * 0.9), int(video_height * 0.8)), Image.LANCZOS)
+        final_width = int(video_width * 0.9)
+        final_height = int(video_height * 0.8)
+        img = img.resize((final_width, final_height), Image.LANCZOS)
+        
+        print(f"🔍 DEBUG: Final image size: {img.size}")
+        
+        # Convert to numpy array
+        img_array = np.array(img)
+        print(f"🔍 DEBUG: Image array shape: {img_array.shape}")
+        print(f"🔍 DEBUG: Image array min/max values: {img_array.min()}/{img_array.max()}")
+        
+        # Create ImageClip
+        text_clip = ImageClip(img_array, transparent=True, duration=duration)
+        text_clip = text_clip.set_position('center')
+        
+        print(f"✅ Created enhanced PIL text clip: {final_width}x{final_height}")
+        return text_clip
+        
+    except Exception as e:
+        print(f"❌ Error creating enhanced PIL text: {e}")
+        import traceback
+        traceback.print_exc()
+        # Ultimate fallback
+        return create_text_clip_with_pil(text, video_width, video_height, font_size, text_color, duration)
+
+def create_simple_visible_text_clip(text, video_width, video_height, font_size, text_color, duration):
+    """Create a simple, guaranteed-visible text clip using PIL with default font"""
+    try:
+        from moviepy.video.VideoClip import ImageClip
+        import textwrap
+        
+        print(f"🎯 Creating SIMPLE visible text: '{text[:50]}...'")
+        
+        # Ensure text is properly formatted
+        if not text or not text.strip():
+            text = "No text provided"
+        
+        text = text.strip()
+        import re
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Use a reasonable text area
+        text_width = int(video_width * 0.8)
+        text_height = int(video_height * 0.6)
+        
+        # Create image with transparent background
+        img = Image.new('RGBA', (text_width, text_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Parse color
+        if text_color.startswith('#'):
+            text_color = text_color.lstrip('#')
+            color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
+        else:
+            color_rgb = (255, 255, 255)  # Default to white
+        
+        # Use default font but make it larger for visibility
+        font = ImageFont.load_default()
+        effective_font_size = max(font_size * 3, 80)  # Make it much larger
+        
+        # Simple text wrapping
+        avg_char_width = effective_font_size * 0.6
+        chars_per_line = max(15, int(text_width / avg_char_width))
+        wrapped_lines = textwrap.wrap(text, width=chars_per_line)
+        
+        print(f"📝 Wrapped into {len(wrapped_lines)} lines")
+        
+        # Calculate layout
+        line_height = effective_font_size + 20
+        total_text_height = len(wrapped_lines) * line_height
+        start_y = max(0, (text_height - total_text_height) // 2)
+        
+        # Draw each line with maximum visibility
+        for i, line in enumerate(wrapped_lines):
+            if not line.strip():
+                continue
+            
+            # Get text dimensions
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_line_width = bbox[2] - bbox[0]
+            x = max(0, (text_width - text_line_width) // 2)
+            y = start_y + (i * line_height)
+            
+            print(f"✍️ Drawing line {i+1}: '{line}' at ({x}, {y})")
+            
+            # Draw THICK black outline for maximum visibility
+            outline_width = 6
+            for dx in range(-outline_width, outline_width + 1):
+                for dy in range(-outline_width, outline_width + 1):
+                    if dx != 0 or dy != 0:
+                        draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 255))
+            
+            # Draw main text
+            draw.text((x, y), line, font=font, fill=(*color_rgb, 255))
         
         # Convert to numpy array
         img_array = np.array(img)
@@ -908,15 +1108,23 @@ def create_enhanced_pil_text_clip(text, video_width, video_height, font_size, te
         text_clip = ImageClip(img_array, transparent=True, duration=duration)
         text_clip = text_clip.set_position('center')
         
-        print(f"Created enhanced PIL text clip: {img.width}x{img.height}")
+        print(f"✅ Created simple visible text clip: {text_width}x{text_height}")
         return text_clip
         
     except Exception as e:
-        print(f"Error creating enhanced PIL text: {e}")
+        print(f"❌ Error in simple text creation: {e}")
         import traceback
         traceback.print_exc()
-        # Ultimate fallback
-        return create_text_clip_with_pil(text, video_width, video_height, font_size, text_color, duration)
+        
+        # Ultimate fallback - just a colored rectangle with text
+        from moviepy.video.VideoClip import ColorClip
+        fallback_clip = ColorClip(
+            size=(int(video_width * 0.8), 200), 
+            color=(255, 255, 255), 
+            duration=duration
+        ).set_position('center')
+        print("⚠️ Created fallback colored rectangle")
+        return fallback_clip
 
 def create_story_video(poem_text, video_url, audio_url, font_size, text_color, duration, output_path):
     """Create Instagram story video with poem overlay"""
@@ -992,8 +1200,8 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         effective_font_size = max(font_size, min_font_size)
         print(f"Font size: requested={font_size}, effective={effective_font_size}")
         
-        # Create text using high-quality rendering (MoviePy with ImageMagick fallback to enhanced PIL)
-        text_clip = create_text_clip_with_moviepy(
+        # Create text using simple, guaranteed-visible rendering
+        text_clip = create_simple_visible_text_clip(
             poem_text, 
             video_clip.w, 
             video_clip.h, 
