@@ -691,17 +691,15 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
         else:
             print("Video dimensions are valid, proceeding with actual video")
         
-        # Ensure minimum font size for readability
-        min_font_size = 40
-        effective_font_size = max(font_size, min_font_size)
-        print(f"Font size: requested={font_size}, effective={effective_font_size}")
+        # Use the exact font size requested by the user
+        print(f"Font size: requested={font_size}")
         
         # Create text using improved PIL rendering with proper formatting
         text_clip = create_text_clip_with_pil(
             poem_text, 
             video_clip.w, 
             video_clip.h, 
-            effective_font_size, 
+            font_size, 
             text_color, 
             duration
         )
@@ -864,130 +862,6 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
                 print(f"Warning: Could not clean up temporary file after error {temp_video_path}: {cleanup_error}")
         
         return False
-
-# Removed deprecated create_text_preview_image function
-        text_width = 1080
-        text_height = 1920
-        
-        # Create image with black background
-        img = Image.new('RGB', (text_width, text_height), (0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        
-        # Parse color
-        if text_color.startswith('#'):
-            text_color = text_color.lstrip('#')
-            color_rgb = tuple(int(text_color[i:i+2], 16) for i in (0, 2, 4))
-        else:
-            color_rgb = (255, 255, 255)  # Default to white
-        
-        # Calculate effective font size (scale up for better quality)
-        effective_font_size = max(font_size * 2, 80)
-        
-        # Try to load high-quality fonts in order of preference
-        font = None
-        font_paths = [
-            # Bundled font (highest priority)
-            os.path.join(os.path.dirname(__file__), 'static', 'fonts', 'Roboto-Bold.woff2'),
-            # System fonts that are commonly available
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-            '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
-            '/usr/share/fonts/truetype/roboto/Roboto-Bold.ttf',
-            '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/TTF/LiberationSans-Bold.ttf',
-            # Additional common paths
-            '/System/Library/Fonts/Helvetica.ttc',  # macOS
-            '/System/Library/Fonts/Arial.ttf',      # macOS
-            'C:/Windows/Fonts/arial.ttf',           # Windows
-            'C:/Windows/Fonts/calibri.ttf',         # Windows
-        ]
-        
-        for font_path in font_paths:
-            if os.path.exists(font_path):
-                try:
-                    font = ImageFont.truetype(font_path, effective_font_size)
-                    print(f"✅ Using high-quality font for preview: {os.path.basename(font_path)}")
-                    break
-                except Exception as e:
-                    print(f"❌ Failed to load {font_path} for preview: {e}")
-                    continue
-        
-        if font is None:
-            print("⚠️ No system fonts found, using default font")
-            font = ImageFont.load_default()
-            effective_font_size = max(font_size * 3, 100)  # Make default font larger
-        
-        # Process text lines with intelligent wrapping
-        processed_lines = []
-        for line in text.split('\n'):
-            if not line.strip():
-                processed_lines.append('')  # Keep empty lines for spacing
-                continue
-            
-            # For lines that are too long, wrap them intelligently
-            if len(line) > 40:  # If line is very long, wrap it
-                # Calculate optimal wrap width based on font size
-                avg_char_width = effective_font_size * 0.6
-                chars_per_line = max(25, int((text_width * 0.8) / avg_char_width))
-                wrapped = textwrap.wrap(line, width=chars_per_line)
-                processed_lines.extend(wrapped)
-            else:
-                processed_lines.append(line)
-        
-        # Calculate optimal line height and spacing
-        # Get actual line height from font metrics
-        test_bbox = draw.textbbox((0, 0), "Ay", font=font)  # Use 'Ay' to get proper line height
-        line_height = (test_bbox[3] - test_bbox[1]) + int(effective_font_size * 0.3)  # Add 30% spacing
-        
-        # Calculate total text height
-        total_text_height = len(processed_lines) * line_height
-        
-        # Center the text vertically
-        start_y = max(0, (text_height - total_text_height) // 2)
-        
-        print(f"📝 Processed into {len(processed_lines)} lines for preview")
-        print(f"📏 Line height: {line_height}, Total height: {total_text_height}")
-        
-        # Draw each line with enhanced visibility
-        for i, line in enumerate(processed_lines):
-            if not line.strip():
-                continue  # Skip empty lines in drawing
-            
-            # Get text dimensions for centering
-            bbox = draw.textbbox((0, 0), line, font=font)
-            text_line_width = bbox[2] - bbox[0]
-            text_line_height = bbox[3] - bbox[1]
-            
-            # Center horizontally
-            x = max(0, (text_width - text_line_width) // 2)
-            y = start_y + (i * line_height)
-            
-            print(f"✍️ Drawing line {i+1}: '{line}' at ({x}, {y})")
-            
-            # Draw text with enhanced outline for maximum visibility
-            outline_width = max(3, effective_font_size // 20)  # Proportional outline
-            
-            # Draw black outline for contrast
-            for dx in range(-outline_width, outline_width + 1):
-                for dy in range(-outline_width, outline_width + 1):
-                    if dx != 0 or dy != 0:
-                        draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0))
-            
-            # Draw main text
-            draw.text((x, y), line, font=font, fill=color_rgb)
-        
-        # Save preview image with high quality
-        img.save(output_path, 'PNG', optimize=True)
-        print(f"✅ Saved high-quality text preview image to {output_path}")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Error creating text preview image: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-# End of deprecated function
 
 # Text preview function moved to utils.py
 
