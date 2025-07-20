@@ -367,14 +367,38 @@ def create_story_video(poem_text, video_url, audio_url, font_size, text_color, d
             print("Video dimensions are valid, proceeding with actual video")
         
         # Create text clip using label method (doesn't require ImageMagick)
-        text_clip = TextClip(
-            poem_text,
-            fontsize=min(font_size, 80),  # Cap font size
-            color=text_color,
-            font='Arial',
-            method='label',  # Use label method which doesn't require ImageMagick
-            size=(min(video_clip.w * 0.9, 1000), None)  # Cap width
-        ).set_position('center').set_duration(duration)
+        try:
+            text_clip = TextClip(
+                poem_text,
+                fontsize=min(font_size, 80),  # Cap font size
+                color=text_color,
+                font='Arial',
+                method='label',  # Use label method which doesn't require ImageMagick
+                size=(min(video_clip.w * 0.9, 1000), None)  # Cap width
+            ).set_position('center').set_duration(duration)
+        except Exception as text_error:
+            print(f"Error creating text clip with label method: {text_error}")
+            # Fallback: try with caption method
+            try:
+                text_clip = TextClip(
+                    poem_text,
+                    fontsize=min(font_size, 80),
+                    color=text_color,
+                    font='Arial',
+                    method='caption',
+                    size=(min(video_clip.w * 0.9, 1000), None)
+                ).set_position('center').set_duration(duration)
+                print("Successfully created text clip with caption method")
+            except Exception as caption_error:
+                print(f"Error creating text clip with caption method: {caption_error}")
+                # Final fallback: create a simple colored rectangle as placeholder
+                from moviepy.video.VideoClip import ColorClip
+                text_clip = ColorClip(
+                    size=(min(video_clip.w * 0.9, 1000), 100), 
+                    color=(255, 255, 255), 
+                    duration=duration
+                ).set_position('center')
+                print("Created fallback colored rectangle instead of text")
         
         # Add audio if provided
         if audio_url and audio_url.strip():
