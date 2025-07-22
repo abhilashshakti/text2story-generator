@@ -14,7 +14,7 @@ class Config:
     PEXELS_API_KEY = os.environ.get('PEXELS_API_KEY')
     
     # Jamendo Music API (for free music)
-    JAMENDO_API_KEY = os.environ.get('JAMENDO_API_KEY')
+    JAMENDO_CLIENT_ID = os.environ.get('JAMENDO_CLIENT_ID')
     
     # Google Sheets API
     GOOGLE_SHEETS_CREDENTIALS = os.environ.get('GOOGLE_SHEETS_CREDENTIALS')
